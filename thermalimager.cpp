@@ -1,11 +1,11 @@
-#include <iostream>
+//#define JUST_LINUX
 
-//#include "./include/InfraredTempSDK.h"
+#include <iostream>
+#include "./include/InfraredTempSDK.h"
 
 int main()
 {
-    //int ret = sdk_initialize();
-    printf("kj");
+    printf("Hello InfiRAY");
     return 0;
 }
 
