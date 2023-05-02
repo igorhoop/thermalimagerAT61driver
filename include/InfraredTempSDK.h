@@ -18,6 +18,7 @@
 
 //#include "afxwin.h"
 #include "InfraredTempSDK_def.h"
+
 #include "IRNet.h"
 #include "VSNETStructDef.h"
 
