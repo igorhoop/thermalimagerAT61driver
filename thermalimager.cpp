@@ -2,217 +2,233 @@
 #include <string>
 #include "include/InfraredTempSDK.h"
 
-IRNETHANDLE SdkHandle;          // дескриптор для работы с SDK
-int DeviceType = 0;             // тип устройства
+#include "headers/myfunctions.h"
+
+
+IRNETHANDLE pSdk;               // дескриптор для работы с SDK
 struct ChannelInfo Chan_Info;   // структура с информацией о подключении
+
 bool isLogin = false;           // флаг прохождения успешной авторизации в устройстве
 
 DeviceList devicelist;
 
+char curCapName[50] = "capture3";
 
 
 
-
-void device_login()
+// ФУНКЦИЯ-ОБРАБОТЧИК ПРИХОДА CООБЩЕНИЙ
+void MessageCallBackReceiveMy(IRNETHANDLE SdkHandle, WPARAM wParam, LPARAM iParam, void * context)
 {
-    std::cout << "Попытка залогиниться в устройство..." << std::endl;
-
-    int step_result = 999; 
-    char UserName[30] = "888888";
-    char UserPass[30] = "888888";
-    
-
-    // шаг 1. Установка типа девайса (нах здесь логин и пароль?)
-    sdk_set_type(DeviceType, UserName, UserPass); // ничего не возвращает. Зачем здесь юзер и пароль неясно
-    
-
-
-    // шаг 2. Инициализация SDK
-    step_result = sdk_initialize();         // инициализация SDK. Вернет 0 при успешном результате
-    std::cout << " \tИнициализация SDK: " << step_result << std::endl;
-
-    
-
-    // шаг 3. Создание дескриптора SDK
-    SdkHandle = sdk_create();   // 
-    if (SdkHandle == NULL)
-    {
-        std::cout << "\tНеудачное создание SDK :(" << std::endl;
-    }
-    else
-    {
-        std::cout << "\tСоздание SDK - успешно :)" << std::endl;
-    }
-
-
-    // шаг xxx.
-    //sdk_search_device(SdkHandle, devicelist);
-
-    
-    // шаг 4. непосредственно логин в устройство
-    Chan_Info.channel = 0;
-    Chan_Info.wPortNum = 3000;
-    strcpy_s(Chan_Info.szIP, "192.168.1.156");
-    strcpy_s(Chan_Info.szServerName, "AT61F-CAM");
-    strcpy_s(Chan_Info.szUserName, "888888");
-    strcpy_s(Chan_Info.szPWD, "888888");
-    
-    isLogin = (sdk_loginDevice(SdkHandle, Chan_Info) == 0);
-    std::cout << (isLogin?"\tУспешная авторизация (хотя она всегда успешная)":"Неуспешная авторизация :(") << std::endl;
-    
-}
-
-
-void MessageCallBackReceive(IRNETHANDLE SdkHandle, WPARAM wParam, LPARAM iParam, void * context)
-{
-    std::cout << "wParam: " << iParam << std::endl;
-}
-
-
-void SerialCallBackMy(char *pRecvDataBuff, int BuffSize, void *context)
-{
-    printf("metka metka. Прилетело %d байт \n", BuffSize);
-    if (BuffSize < 0)
-    {
-        std::cout << "SerialCallBackReceive: Неудача? Буфер равен: " << BuffSize ;
-        return;
-    }
-    //CString showData;
-    int serialDataSize = BuffSize;
-    unsigned char serialData[512];
-    for (int i = 0; i < serialDataSize; ++i)
-    {
-        printf("прилетело: %c\n", pRecvDataBuff[i]);
-        //showData.AppendFormat(_T("%02X "), ((UCHAR*)pRecvDataBuff)[i]);
-        //serialData[i] = (unsigned char)pRecvDataBuff[i];
-    }
-    //std::cout << " 数据大小=" + to_string(serialDataSize) << "\n 数据=" + showData << std::endl;
-}
-
-
-int counter = 0;
-int snap_counter = 0;
-
-
-void TemperatureCallBackMy(char *pBuffer, long BufferLen, void* pContext)
-{
-    //unsigned char _tempBuffer[1280 * 1024 * 2];
-    //unsigned short _temp_data[1280 * 1024];
-
-    counter++;
-
-    //std::cout << "Итерация: " << counter << std::endl;
-    //std::cout << "Пришли данные по температуре. Длина буфера: " << BufferLen << std::endl;
-
-    std::vector<unsigned char> _tempBuffer(1280 * 1024 * 2);
-    std::vector<unsigned short> _temp_data(1280 * 1024);
-
-
-
-    //if (_deviceType == DEVICE_TYPE_B)
-    //{
-    //    memcpy(_tempBuffer, pBuffer, BufferLen);
-    //    for (int ii = 0; ii < BufferLen / 4; ii++) //数据转换
-    //    {
-    //    _temp_data[ii * 2] = (unsigned short)((unsigned short)(_tempBuffer[ii * 2] << 8) + _tempBuffer[ii * 2 + 1 + _width * _height]);
-    //    _temp_data[ii * 2 + 1] = (unsigned short)((unsigned short)(_tempBuffer[ii * 2 + 1] << 8) + _tempBuffer[ii * 2 + (_width * _height)]);
-    //    }
-    //}
-    //else
-    //{
-        float celsius_point;
-        memcpy(_temp_data.data(), pBuffer, BufferLen);
-        //示例显示 100 个前数据
-        for (int i = 0; i < BufferLen; i++)
-        {
-           celsius_point = ((_temp_data[i]+ 7000)/30) - 273.2;
-
-
-            if(celsius_point > 40)
-            {
-                std::cout << celsius_point << std::endl;
-                int result = sdk_CapSingle(SdkHandle, Chan_Info);
-                //sdk_snapshot(SdkHandle, Chan_Info, 1, "ddd");
-            
-                
-                break;
-                
-            }
-        }
-
-        // сделать скриншот
-        
-        //sleep(5);
-        
-    //}
-        
-    //}
-
-}
-
-void SnapCallBackMy(int m_ch, char *pBuffer, int size, void *context)
-{
-    snap_counter++;
-    
-    printf("metka work snap call: %d \n", snap_counter);
-    if(pBuffer)
-    {
-        printf("metka work snap call ZAHOD V USLOVIE\n");
-        char filePath[200] = "capture.jpg";
-        //GetModuleFileName(NULL, filePath, sizeof(filePath));
-        //SYSTEMTIME st;
-        //GetLocalTime(&st);
-        char fileName[50] = "test.jpg";
-        //sprintf(fileName, "test.JPG");
-        //strcat_s(filePath, fileName);
-        FILE * pFile = fopen(filePath, "wb");
-        if (!pFile) //
-        {
-            printf("metka 777");
-            return;
-        }
-        if (!fwrite(pBuffer, size, 1, pFile)) //写文件失败
-            std::cout << "Не удалось сохранить файл";
-        else
-            std::cout << "Сохранение файла="<< filePath;
-        fclose(pFile);
-        printf("metka work snap call VYHOD IZ USLOVIYA\n");
-
-        //sleep(5);
-
-
-    }
+    std::cout << "wParam: " << wParam << std::endl;
+    std::cout << "iParam: " << iParam << std::endl;
+    std::cout << "Мессаги! Мессаги! " << iParam << std::endl;
 
 }
 
 
-void VideoCallBackReceiveMy(char *pBuffer, long BufferLen, int width, int height, void* pContext)
-{
-    
-}
-
-
-char RecieveBuff[500] = { 0 };
-int buflen;
 
 
 int main()
 {
+    float camTemp;
+    int subresult;
+    char camSN[30];
+    char camPN[50];
+
+    std::cout << "Это драйвер для тепловизора AT61F (производства Infiray)." << std::endl;
+    initial();
+    std::cout << "Пробуем подключиться..." << std::endl;
+
+    // установка функций-обработчиков
+    //int res = SetTempCallBack(pSdk, TempCallBackMy, NULL);
+    SetSerialCallBack(pSdk, Chan_Info, SerialCallBackMy, NULL);
+    //SetSnapCallBack(pSdk, Chan_Info, SnapCallBackMy, NULL);
+    SetMessageCallBack(pSdk, MessageCallBackReceiveMy, NULL);
+    sdk_set_capture_format(pSdk, Chan_Info, 4);
+
+    subresult = sdk_get_camera_temp(pSdk, &camTemp);
+  
     
-    std::cout << "Хелло. Это драйвер для тепловизора AT61U (производства Infiray). Пусть он будет работать с нашими роботами." << std::endl;
-    device_login();
+    if(subresult == 0)
+    {
+        std::cout << "\tСигнал от камеры есть" << std::endl;
+        sdk_get_SN_PN(pSdk, Chan_Info, camSN, camPN);
+        std::cout << "\ts/n=" << camSN << std::endl;
+        std::cout << "\tp/n=" << camPN << std::endl;
+        sdk_get_camera_temp(pSdk, &camTemp);
+        std::cout << "\tтемпература камеры: " << camTemp << " Цельсия" << std::endl;
+    }
+    else
+    {
+        std::cout << "\tСигнала от камеры нет. Завершаемся" << std::endl;
+        return 0;
+    }
 
 
+    std::cout << "Ожидание входящих команд..." << std::endl;
+
+    char com = 'a';
+    Area_Temp area_temp = { 0 };
+
+
+    // сетевые установки
+    int bytes_send; // количество отправленных клиенту байт
+    int bytes_recv; // количество полученных от клиента байт
+    int listener_socket; // дескриптор слушающего сокета
+    int exchange_socket; // десприктор сокета для обмена данными с клиентом
+    sockaddr_in ServerAddr; // адресная структура, которую нужно заполнить и связать с сокетом. Хранит IP-адрес
+    sockaddr_in ClientAddr; // адресная структура клиента для инфы о нем, которая будет заполняться при приходе от него сообщений
+    int ClientAddrSize = sizeof(ClientAddr); // адрес этой переменной, в которой лежит размер структуры, передадим функции accept()
+    sockaddr * addr;
+    socklen_t * addr_size;
+    ServerAddr.sin_family = AF_INET;
+    ServerAddr.sin_addr.s_addr = INADDR_ANY; // раннее было inet_addr(my_ip), таким образом привяжемся к конкретному сетевому интерфейсу. Либо использовать INADDR_ANY, для входящих от всех интерфейсов
+    ServerAddr.sin_port = htons(30001); // занимаемый порт на моем компьютере
+    listener_socket = socket(AF_INET,SOCK_STREAM, 0); // Семейство Internet, потоковые сокеты, TCP    
+    if (bind(listener_socket, (sockaddr *) &ServerAddr, sizeof(ServerAddr)) < 0)
+    {
+        std::cerr << "Ошибка bind\nПерезапустить через минуту?\n"; // МИНУТА!
+        return 0;;
+    }
+    // для TCP нужно возиться с соединениями (использовать listen() и accept())
+    // для передачи и приема используем 
+   
+    if(listen(listener_socket, 5) < 0) // создание очереди запросов на соединение. Указывается размер. Блокирует программу (??? походу нет) и ждет подключений
+    {
+        std::cerr << "Ошибка Listen";
+    }
+    char recv_buf[1024]; // приемный буфер
+    char * luxuary_buf = new char[1000];
+    int result;
+    bool flag=true;
+
+    while(true)
+    {
+        std::string response;
+        std::cout << "Ожидание входящих команд..." << std::endl;
+
+        /*
+        printf("\n\n\n ==== НАЧАЛО ОЖИДАНИЯ КЛИЕНТА ==== \n____________\n\n");
+        
+        exchange_socket = accept(listener_socket, (sockaddr *) &ClientAddr, (socklen_t *) &ClientAddrSize); // а вот здесь уже блокируется программа. Извлекает первый запрос из очереди либо если очередь пустая ждет и блокирует программу до первого соединения
+        if(exchange_socket >= 0)
+        {
+            printf("Принят запрос на соединение:\n");
+        }
+        else
+        {
+            printf("Что то не так с сокетом обмена:\n");
+            std::cout << errno;
+            break;
+        }
+        
+        std::string his_ip = "";
+        his_ip = inet_ntoa(ClientAddr.sin_addr);
+        printf("IP-адрес подключившегося: %s \n", his_ip.c_str()) ;
+        printf("Его порт: %d \n", ClientAddr.sin_port);
+
+        bytes_recv = recv(exchange_socket, luxuary_buf, 1024, 0);
+        std::string currentRequest(luxuary_buf, bytes_recv);
+        std::cout << "Пришло в буфер: \n\n" << currentRequest << std::endl;
+
+        int typereq = GetTypeOfRequest(currentRequest);
+        */
+
+        IRG_Param irg_param;
+        
+        int typereq = 4;
+        std::string PointName = "CurrentPoint";
+        int zz;
+
+        switch(typereq)
+        {
+            case 1: // проверка доступности камеры костылем "считать температуру камеры"
+                std::cout << "Проверка камеры..." << std::endl;
+                subresult = sdk_get_camera_temp(pSdk, &camTemp);
+                if(subresult==0)
+                {
+                    std::cout << "\tКамера на связи" << std::endl;
+                }
+                else
+                {
+                    std::cout << "\tКамера не отвечает" << std::endl;       
+                }
+                break;
+
+            
+
+            case 2:
+                sdk_get_temp_data(pSdk, Chan_Info, 256, area_temp);
+                
+                std::cout << "TempMax: " << (float) area_temp.iTempMax/10 << std::endl;
+                std::cout << "TempMin: " << (float) area_temp.iTempMin/10 << std::endl;
+                std::cout << "TempCent: " << (float) area_temp.iTempCenter/10 << std::endl;
+                std::cout << "TempAvg: " << (float) area_temp.iTempAvg/10 << std::endl;
+                break;
+
+            case 3:
+                sdk_CapSingle(pSdk, Chan_Info);
+
+                response = "Snimok sdelan";
+                break;
+
+            case 4:
+                
+                sdk_snapshot(pSdk, Chan_Info, 1, (char *) PointName.c_str());
+                // далее извлекаем из irg файла данные
+                zz = sdk_get_irg_param( (char *) PointName.append(".irg").c_str(), &irg_param);
+                std::cout << zz << std::endl;
+
+                //PointName.append(GetCurrentTimestamp(1));
+                
+                std::cout << "\tСнэпшот сделан: " << GetCurrentTimestamp(1) << std::endl;
+
+                response = "Snapshot sdelan";
+                break;
+
+            case 0: // reload
+                std::cout << "Reload Parameters" << std::endl;   
+                sdk_release(pSdk);
+                initial();
+                SetSerialCallBack(pSdk, Chan_Info, SerialCallBackMy, NULL);
+                SetSnapCallBack(pSdk, Chan_Info, SnapCallBackMy, NULL);
+                SetMessageCallBack(pSdk, MessageCallBackReceiveMy, NULL);
+                break;
+        }
+
+        continue;
+
+         // ФОРМИРОВАНИЕ ОТВЕТА
+        
+        result = send(exchange_socket, response.c_str(), response.size(), 0);
+        std::cout << "Отправляем обратно количество байт: " << result << std::endl;
+
+        close(exchange_socket); 
+
+        continue;
+
+
+
+    }
+
+    close(listener_socket);
+    return 0;
+
+/*
+    while(sdk_get_camera_temp(pSdk, &camTemp) == -1)
+
+
+        //uint8_t sendCmd[] = { 0xAA, 0x04, 0x01, 0x70, 0x00, 0x1F, 0xEB, 0xAA };
+        //sdk_serial_cmd_send(pSdk, reinterpret_cast<char*>(sendCmd), 8);
+
+        
 
     //sdk_osd_switch(SdkHandle, Chan_Info, 1);
 
     sdk_set_temp_unit(SdkHandle, Chan_Info, 0);
     
-    SetMessageCallBack(SdkHandle, MessageCallBackReceive, NULL); // НИЧЕГО НЕ ПРОИСХОДИТ
+    
     // установка функций обработки приходящих данных
-    SetSerialCallBack(SdkHandle, Chan_Info, SerialCallBackMy, NULL); // установка функции обработки серийных данных
-    SetTempCallBack(SdkHandle, TemperatureCallBackMy, NULL);         // установка функции обработки температурных данных
-    SetSnapCallBack(SdkHandle, Chan_Info, SnapCallBackMy, NULL);
     SetDeviceVideoCallBack(SdkHandle, VideoCallBackReceiveMy, NULL);
 
     uint8_t sendCmd[] = {0xAA, 0x04, 0x01, 0x70, 0x00, 0x1F, 0xEB, 0xAA};
@@ -241,7 +257,9 @@ int main()
 
     std::cout << "\n\n\n\n\n";
     
-    Area_Temp area_temp = { 0 };
+    
+
+    */
     
     /*Area_pos area1_pos;
     area1_pos.iMode = 2;
@@ -260,6 +278,8 @@ int main()
 
     //sdk_remove_area_pos(SdkHandle, Chan_Info, 6, 2);
 
+
+    /*
     envir_param envir_data;
     envir_param envir_data2;
     envir_data2.airTemp = 200000;
@@ -312,10 +332,7 @@ int main()
     int res = sdk_get_temp_data(SdkHandle, Chan_Info, 256, area_temp);
     std::cout << "Result: " << res << std::endl;
 
-    std::cout << "TempMax: " << (float) area_temp.iTempMax/10 << std::endl;
-    std::cout << "TempMin: " << (float) area_temp.iTempMin/10 << std::endl;
-    std::cout << "TempCent: " << (float) area_temp.iTempCenter/10 << std::endl;
-    std::cout << "TempAvg: " << (float) area_temp.iTempAvg/10 << std::endl;
+
 
     sdk_CapSingle(SdkHandle, Chan_Info);
 
@@ -336,11 +353,13 @@ int main()
     
     sdk_release(SdkHandle); // походу удаление дескриптора
     return 0;
+
+
+
+*/
+
+
 }
-
-
-
-
 
 /*
     DeviceList deviceList = { 0 }; // структура для хранения списка устройств
@@ -349,7 +368,7 @@ int main()
 
     std::cout << "Кол-во устройств: " << deviceList.iNumber << std::endl;
 
-    if(deviceList.iNumber > 0)
+    if(deviceList.iNumber > 0)#include "additional.cpp"
     {
         for(int i=0; i < deviceList.iNumber; i++)
         {
