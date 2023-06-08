@@ -2,7 +2,7 @@
 #include "include/InfraredTempSDK.h"
 #include "headers/myfunctions.h"
 #include <ctime>
-
+#include <cstdlib>
 
 
 
@@ -53,33 +53,10 @@ void initial()
 }
 
 
-
-// =========== ОПРЕДЕЛЕНИЕ ТИПА ЗАПРОСА ===========
-int GetTypeOfRequest(std::string request)
+struct MakeCapParsing
 {
-    int justvar;                    // для вычислений
-    std::string find_substring;     // для поиска подстрок
-
-    find_substring = "command_";
-    int vsp1;
-    int vsp2;
-    vsp1 = request.find(find_substring);
-    vsp2 = request.find(".");
-
-    std::string commandStr = request.substr(vsp1+find_substring.size(), vsp2 - (vsp1+find_substring.size()));
-    std::cout << "Пришла команда: " << commandStr << std::endl;
-
-    if(commandStr == "2")
-        return 2;
-
-    if(commandStr == "3")
-        return 3;
-
-    if(commandStr == "5")
-        return 5;
-
-    return 999; // если ничего не подошло
-}
+    std::string name;
+};
 
 
 
@@ -132,7 +109,7 @@ std::string GetContentFromFile(const std::string & filePath) // функция �
 
 
 
-// функция для работы со временем. Форматы: 0 - выдача строки с датой, 1 - выдача строки с датой и временем
+// функция для работы со временем. Форматы: 0 - выдача строки с датой, 1 - выдача строки с датой и временем, 2 - чисто время
 std::string GetCurrentTimestamp(int format)
 {
     char date_format[20];
@@ -146,7 +123,10 @@ std::string GetCurrentTimestamp(int format)
             strftime(date_format, sizeof(date_format), "%Y-%m-%d", ltm);
             break;
         case 1:
-            strftime(date_format, sizeof(date_format), "%Y-%m-%d %H:%M:%S", ltm);
+            strftime(date_format, sizeof(date_format), "%Y-%m-%d_%H:%M:%S", ltm);
+            break;
+        case 2:
+            strftime(date_format, sizeof(date_format), "%H:%M:%S", ltm);
             break;
     }
 

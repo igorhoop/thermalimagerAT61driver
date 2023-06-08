@@ -5,7 +5,6 @@ void initial();
 
 std::string GetContentFromFile(const std::string & filePath);
 void GetConfigForConnectCAM(std::string path);
-int GetTypeOfRequest(std::string request);
 std::string GetCurrentTimestamp(int format);
 
 

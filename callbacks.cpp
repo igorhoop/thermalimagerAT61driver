@@ -6,17 +6,17 @@
 extern char curCapName[50];
 
 // ФУНКЦИЯ-ОБРАБОТЧИК ПРИХОДА ТЕМПЕРАТУРНОЙ МАТРИЦЫ
-void TempCallBack(char *pBuffer, long BufferLen, void* pContext)
+void TempCallBackMy(char *pBuffer, long BufferLen, void* pContext)
 {
     std::vector<unsigned short> _temp_data(1280 * 1024);
 
     std::cout << "Пришли данные по температуре. Длина буфера: " << BufferLen << std::endl;
- 
+    
 
     float celsius_point;
     memcpy(_temp_data.data(), pBuffer, BufferLen);
     //обработка первых 100 элементов буфера
-    for (int i = 0; i < BufferLen; i++)
+    for (int i = 0; i < 100; i++)
     {
         celsius_point = ((_temp_data[i]+ 7000)/30) - 273.2;
         std::cout << celsius_point << std::endl;

@@ -3,6 +3,9 @@
 #include "include/InfraredTempSDK.h"
 
 #include "headers/myfunctions.h"
+#include <array>
+#include <cstdint>
+#include <cstring>
 
 
 IRNETHANDLE pSdk;               // дескриптор для работы с SDK
@@ -12,20 +15,24 @@ bool isLogin = false;           // флаг прохождения успешн�
 
 DeviceList devicelist;
 
-char curCapName[50] = "capture3";
 
+#pragma pack(push, 1)
+struct SENDPARAM {
+ uint8_t error;
+ int32_t average_t;
+ int32_t min_t;
+ int32_t max_t;
+ uint8_t signal;
+};
 
-
-// ФУНКЦИЯ-ОБРАБОТЧИК ПРИХОДА CООБЩЕНИЙ
-void MessageCallBackReceiveMy(IRNETHANDLE SdkHandle, WPARAM wParam, LPARAM iParam, void * context)
-{
-    std::cout << "wParam: " << wParam << std::endl;
-    std::cout << "iParam: " << iParam << std::endl;
-    std::cout << "Мессаги! Мессаги! " << iParam << std::endl;
-
-}
-
-
+struct GETPARAM {
+ uint8_t cmd; 
+ int32_t around_temp;
+ int32_t distance;
+ int32_t min_t;
+ int32_t max_t;
+};
+#pragma pack(pop)
 
 
 int main()
@@ -35,20 +42,55 @@ int main()
     char camSN[30];
     char camPN[50];
 
+    // Устанавливаемые параметры для тепловизора
+    int32_t SettedAroundT = 0;
+    int32_t SettedDist = 0;
+
+    
+
+    int TmmFlag = false; // флаг установки порога минимальной и максимальной температуры
+
+    int32_t SettedTmax = 0;
+    int32_t SettedTmin = 0;
+
+    unsigned short temp_data[640*512] = { 0 };
+    unsigned char image_data[1000*1000] = { 0 };
+
+    
+
     std::cout << "Это драйвер для тепловизора AT61F (производства Infiray)." << std::endl;
     initial();
-    std::cout << "Пробуем подключиться..." << std::endl;
-
-    // установка функций-обработчиков
+    // Установка функций-обработчиков. Это надо после инициализации
     //int res = SetTempCallBack(pSdk, TempCallBackMy, NULL);
     SetSerialCallBack(pSdk, Chan_Info, SerialCallBackMy, NULL);
     //SetSnapCallBack(pSdk, Chan_Info, SnapCallBackMy, NULL);
-    SetMessageCallBack(pSdk, MessageCallBackReceiveMy, NULL);
     sdk_set_capture_format(pSdk, Chan_Info, 4);
 
-    subresult = sdk_get_camera_temp(pSdk, &camTemp);
-  
+    sdk_set_color_plate(pSdk, Chan_Info, 2); // цветовая гамма
+
+    char * nadpis ="3Logic Group Robotic Systems";
+
+
+    Custom_String osdContent;
+    osdContent.iFormat = 2;
+    osdContent.iFormatTime = 5;
+    osdContent.iShow= 1;
+    osdContent.iIndex = 3;
+    std::memcpy(osdContent.m_szString, nadpis, sizeof(osdContent.m_szString));
+    osdContent.iWidth = 100;
+    osdContent.iDeviceWidth = 640;
+    osdContent.iDeviceHeight = 512;
+    osdContent.iX = 5;
+    osdContent.iY = 50;
+    osdContent.iStringX = 5;
+    osdContent.iStringY = 490;
+    sdk_set_osd_display(pSdk, Chan_Info, osdContent);
     
+    std::cout << "Первоначальное подключение к тепловизору..." << std::endl;
+    subresult = sdk_get_camera_temp(pSdk, &camTemp);
+
+    
+  
     if(subresult == 0)
     {
         std::cout << "\tСигнал от камеры есть" << std::endl;
@@ -64,12 +106,10 @@ int main()
         return 0;
     }
 
-
     std::cout << "Ожидание входящих команд..." << std::endl;
 
     char com = 'a';
     Area_Temp area_temp = { 0 };
-
 
     // сетевые установки
     int bytes_send; // количество отправленных клиенту байт
@@ -102,13 +142,24 @@ int main()
     int result;
     bool flag=true;
 
+
     while(true)
     {
         std::string response;
-        std::cout << "Ожидание входящих команд..." << std::endl;
 
-        /*
-        printf("\n\n\n ==== НАЧАЛО ОЖИДАНИЯ КЛИЕНТА ==== \n____________\n\n");
+        std::array<uint8_t, 14> response_temp_data = {0};
+
+        SENDPARAM OutputStructData = {0};
+        GETPARAM InputStructData = {0};
+
+        char reserve_byte_1 = 0;
+        char reserve_byte_2 = 0;
+        char reserve_byte_3 = 0;
+
+        std::cout << "Ожидание входящих запросов..." << std::endl;
+
+        
+        printf("\n\n\n ==== ЖДЕМ КОМАНДУ ОТ РОБОТА ==== \n____________\n\n");
         
         exchange_socket = accept(listener_socket, (sockaddr *) &ClientAddr, (socklen_t *) &ClientAddrSize); // а вот здесь уже блокируется программа. Извлекает первый запрос из очереди либо если очередь пустая ждет и блокирует программу до первого соединения
         if(exchange_socket >= 0)
@@ -127,23 +178,217 @@ int main()
         printf("IP-адрес подключившегося: %s \n", his_ip.c_str()) ;
         printf("Его порт: %d \n", ClientAddr.sin_port);
 
+        // получение данных из сокета
         bytes_recv = recv(exchange_socket, luxuary_buf, 1024, 0);
-        std::string currentRequest(luxuary_buf, bytes_recv);
-        std::cout << "Пришло в буфер: \n\n" << currentRequest << std::endl;
+        std::cout << "Пришло байт: " << bytes_recv << std::endl;
 
-        int typereq = GetTypeOfRequest(currentRequest);
-        */
+        for(int i=0; i < bytes_recv; i++)
+        {
+            //std::cout << luxuary_buf[i];
+            printf("0x%02X, ", luxuary_buf[i]);
+        }
+
+        // берем первый байт чтобы узнать тип запроса
+        char command = luxuary_buf[0];
+        std::cout << "Тип запроса: " << command+48 << std::endl; // прибавил 48 чтоб отображал число в ASCII
+        std::string RestRequest(luxuary_buf+1, bytes_recv-1);
+        if(command == 0x01)
+        {
+            std::cout << "Это команда на формирование снимка. Имя для снимка: " << RestRequest << std::endl;
+        }
 
         IRG_Param irg_param;
         
-        int typereq = 4;
-        std::string PointName = "CurrentPoint";
-        int zz;
+        // НАСТРОЙКИ ПУТЕЙ К СНИМКАМ
+        std::string CaptureName = "";                       // имя снимка
+        std::string CapturePath = "./photos/";              // путь к снимку
+        int resultmkdir = mkdir(CapturePath.c_str(), 0777); // создаем каталог если он отсутствует
+        std::string todayDirName = GetCurrentTimestamp(0);  // готовимся к созданию каталога с именем-датой (сегодняшней)
+        CapturePath.append(todayDirName);                   // 
+        resultmkdir = mkdir(CapturePath.c_str(), 0777);     // создаем каталог с именем-датой если он отсутствует
+        CapturePath.append("/");                            // добавляем заход в каталог
+        
 
-        switch(typereq)
+
+        int32_t CalcTavg = 0;
+        int32_t CalcTmax = 0;
+        int32_t CalcTmin = 0;
+        
+
+
+
+
+
+        char answer_error = 0x00;
+        char signal = 0x00;
+        int32_t answer_size = 0;
+        int32_t Frame_Tavg;
+        int32_t Frame_Tmax;
+        int32_t Frame_Tmin;
+        
+        
+ 
+        switch(command)
         {
-            case 1: // проверка доступности камеры костылем "считать температуру камеры"
-                std::cout << "Проверка камеры..." << std::endl;
+            
+            case 1: // СДЕЛАТЬ СНИМОК
+                // сначала формируем имя снимка
+                CaptureName = RestRequest;
+                if((CaptureName.length() < 3) || (CaptureName.length() > 39))
+                {
+                    std::cout << "Неподходящая длина имени снимка" << std::endl;
+                    OutputStructData.error = 0x02;
+                }
+                else
+                {
+                    CaptureName.append("_");
+                    CaptureName.append(GetCurrentTimestamp(2));
+                    std::cout << "Принята команда на формирование снимка. Имя для него берем из запроса: " << CaptureName << std::endl;
+                    CapturePath.append(CaptureName);
+                    std::cout << "Путь сохранения снимка: " << CapturePath << std::endl;
+
+                    // делаем jpeg и irg файл
+                    sdk_snapshot(pSdk, Chan_Info, 1, (char *) CapturePath.c_str());
+
+                    // далее извлекаем из irg файла данные
+                    CapturePath.append(".irg");
+                    sdk_get_irg_data( (char *) CapturePath.c_str(), 4, temp_data, image_data);
+
+                    CalcTmax = temp_data[0];
+                    CalcTmin = temp_data[0];
+                    CalcTavg = temp_data[0];
+                    
+                    for(int i=0; i < 327680; i++)
+                    {
+                        CalcTavg += temp_data[i];
+
+                        if(CalcTmax < temp_data[i])
+
+                        {
+                            CalcTmax = temp_data[i];
+                        }
+
+                        if(CalcTmin > temp_data[i])
+                        {
+                            CalcTmin = temp_data[i];
+                        } 
+                    }
+
+                    CalcTavg /= 327680;
+                    CalcTavg = (CalcTavg)/10-273.2;
+                    CalcTmax = (CalcTmax)/10-273.2;
+                    CalcTmin = (CalcTmin)/10-273.2;
+
+                    std::cout << "\tCalcTavg=" << CalcTavg<< std::endl;
+                    std::cout << "\tCalcTmax=" << CalcTmax << std::endl;
+                    std::cout << "\tCalcTmin=" << CalcTmin << std::endl;
+
+                    std::cout << "\tСнимок сделан: " << std::endl;
+                
+
+                    OutputStructData.average_t = CalcTavg;
+                    OutputStructData.min_t = CalcTmin;
+                    OutputStructData.max_t = CalcTmax;
+                    
+
+                    if(TmmFlag == 1)
+                    {
+                        if((CalcTmax >= SettedTmax) && (CalcTmin >= SettedTmin))
+                            OutputStructData.signal = 0x01;
+                    }
+                    else
+                    {
+                        OutputStructData.error = 0x01;
+                    }
+
+                }
+
+
+                remove(CapturePath.c_str());
+                answer_size=14;
+                break;   
+
+
+            case 2: // ЗАПРОС ПАРАМЕТРОВ
+                sdk_get_temp_data(pSdk, Chan_Info, 256, area_temp);
+
+                
+                Frame_Tavg = area_temp.iTempAvg/10;
+                Frame_Tmax = area_temp.iTempMax/10;
+                Frame_Tmin = area_temp.iTempMin/10;
+
+    
+                OutputStructData.average_t = Frame_Tavg;
+                OutputStructData.min_t = Frame_Tmin;
+                OutputStructData.max_t = Frame_Tmax;
+                
+                std::cout << "TempMax: " << Frame_Tmax << std::endl;
+                std::cout << "TempMin: " <<  Frame_Tmin << std::endl;
+                std::cout << "TempAvg: " << Frame_Tavg << std::endl;
+
+
+                if(TmmFlag == 1)
+                {
+                    if((Frame_Tmax >= SettedTmax) && (Frame_Tmin >= SettedTmin))
+                        OutputStructData.signal = 0x01;
+                }
+                else
+                {
+                    OutputStructData.error = 0x01;
+                }
+
+                answer_size = 14;
+                break;
+
+
+            case 3: // УСТАНОВКА ПАРАМЕТРОВ
+
+                std::cout << "Пришла команда на установку параметров" << std::endl;
+
+
+                if((bytes_recv) == sizeof(GETPARAM))
+                {
+                    std::cout << "metka" << std::endl;
+                    memcpy(&InputStructData, luxuary_buf, sizeof(InputStructData));
+                }
+                
+                std::cout << "command: " << InputStructData.cmd << std::endl;
+                std::cout << "aroundTemp: " << InputStructData.around_temp << std::endl;
+                std::cout << "distance: " << InputStructData.distance << std::endl;
+                std::cout << "min_t: " << InputStructData.min_t << std::endl;
+                std::cout << "max_t: " << InputStructData.max_t << std::endl;
+
+                SettedAroundT = InputStructData.around_temp;
+                SettedDist = InputStructData.distance;
+                SettedTmin = InputStructData.min_t;
+                SettedTmax = InputStructData.max_t;
+                TmmFlag=1; // значения установлены
+
+                
+                answer_size = 4;
+
+                break;
+
+
+
+
+            case 0: // reload
+                std::cout << "Reload Parameters" << std::endl;   
+                sdk_release(pSdk);
+                initial();
+                SetSerialCallBack(pSdk, Chan_Info, SerialCallBackMy, NULL);
+                SetSnapCallBack(pSdk, Chan_Info, SnapCallBackMy, NULL);
+                break;
+
+            case 77:
+                sdk_CapSingle(pSdk, Chan_Info);
+
+                response = "Snimok sdelan";
+                break;
+
+            case 4: // проверка доступности камеры костылем "считать температуру камеры"
+
+            std::cout << "Проверка камеры..." << std::endl;
                 subresult = sdk_get_camera_temp(pSdk, &camTemp);
                 if(subresult==0)
                 {
@@ -153,55 +398,37 @@ int main()
                 {
                     std::cout << "\tКамера не отвечает" << std::endl;       
                 }
+                break;    
+                
+              
+
+            default: 
+                std::cout << "неизвестный тип запроса" << std::endl;
+                response = "Неизвестный тип запроса";
                 break;
 
             
-
-            case 2:
-                sdk_get_temp_data(pSdk, Chan_Info, 256, area_temp);
-                
-                std::cout << "TempMax: " << (float) area_temp.iTempMax/10 << std::endl;
-                std::cout << "TempMin: " << (float) area_temp.iTempMin/10 << std::endl;
-                std::cout << "TempCent: " << (float) area_temp.iTempCenter/10 << std::endl;
-                std::cout << "TempAvg: " << (float) area_temp.iTempAvg/10 << std::endl;
-                break;
-
-            case 3:
-                sdk_CapSingle(pSdk, Chan_Info);
-
-                response = "Snimok sdelan";
-                break;
-
-            case 4:
-                
-                sdk_snapshot(pSdk, Chan_Info, 1, (char *) PointName.c_str());
-                // далее извлекаем из irg файла данные
-                zz = sdk_get_irg_param( (char *) PointName.append(".irg").c_str(), &irg_param);
-                std::cout << zz << std::endl;
-
-                //PointName.append(GetCurrentTimestamp(1));
-                
-                std::cout << "\tСнэпшот сделан: " << GetCurrentTimestamp(1) << std::endl;
-
-                response = "Snapshot sdelan";
-                break;
-
-            case 0: // reload
-                std::cout << "Reload Parameters" << std::endl;   
-                sdk_release(pSdk);
-                initial();
-                SetSerialCallBack(pSdk, Chan_Info, SerialCallBackMy, NULL);
-                SetSnapCallBack(pSdk, Chan_Info, SnapCallBackMy, NULL);
-                SetMessageCallBack(pSdk, MessageCallBackReceiveMy, NULL);
-                break;
         }
 
-        continue;
+        //continue;
 
          // ФОРМИРОВАНИЕ ОТВЕТА
         
-        result = send(exchange_socket, response.c_str(), response.size(), 0);
+        //result = send(exchange_socket, response.c_str(), response.size(), 0);
+        
+        //if(answer_size == 4)
+        //{
+
+        
+        result = send(exchange_socket, &OutputStructData, answer_size, 0);
         std::cout << "Отправляем обратно количество байт: " << result << std::endl;
+        //}
+        //else
+        //{
+        //    result = send(exchange_socket, &mystruct, sizeof(GETPARAM), 0);
+        //}
+
+        
 
         close(exchange_socket); 
 
@@ -211,15 +438,11 @@ int main()
 
     }
 
+    sdk_release(pSdk);
     close(listener_socket);
     return 0;
 
 /*
-    while(sdk_get_camera_temp(pSdk, &camTemp) == -1)
-
-
-        //uint8_t sendCmd[] = { 0xAA, 0x04, 0x01, 0x70, 0x00, 0x1F, 0xEB, 0xAA };
-        //sdk_serial_cmd_send(pSdk, reinterpret_cast<char*>(sendCmd), 8);
 
         
 
@@ -227,39 +450,23 @@ int main()
 
     sdk_set_temp_unit(SdkHandle, Chan_Info, 0);
     
-    
-    // установка функций обработки приходящих данных
-    SetDeviceVideoCallBack(SdkHandle, VideoCallBackReceiveMy, NULL);
-
-    uint8_t sendCmd[] = {0xAA, 0x04, 0x01, 0x70, 0x00, 0x1F, 0xEB, 0xAA};
-    int length = sizeof(sendCmd);
-
-
-    int imgType = 3;
-    sdk_set_capture_format(SdkHandle, Chan_Info, imgType);
-
-    
     Alarm_Config alarm_config;
     
     int vvv = sdk_set_temp_alarm(SdkHandle, Chan_Info, 256, alarm_config);
     std::cout << "vvv=" << vvv << std::endl;
 
-
     int iUnit;
     sdk_set_temp_unit(SdkHandle, Chan_Info, 0);
     sdk_get_temp_unit(SdkHandle, Chan_Info, &iUnit);
 
-
     int zapis = sdk_start_record(SdkHandle, Chan_Info, "./file222");
     std::cout << "zapis res: " << zapis << std::endl;
+   
+   
 
-    //exit(1);
+   //sdk_osd_switch(pSdk, Chan_Info, 1); // включение/отключение OSD
 
-    std::cout << "\n\n\n\n\n";
-    
-    
 
-    */
     
     /*Area_pos area1_pos;
     area1_pos.iMode = 2;
@@ -382,11 +589,6 @@ int main()
     }
 
 
-
-    std::cout << "\n\n\n\n" << std::endl;
-   
-    // шаг 5. Подключение к устройству
-    
     
     
 
@@ -399,3 +601,24 @@ int main()
     //SetSerialCallBack(pHandle, chninf, serialCallback, NULL);
     //sdk_release(mySdkHandle);
 */
+
+
+
+
+// старый метод как я делал, потом через структуры сделали
+
+                /*
+                std::memcpy(&SettedAroundT, &luxuary_buf[1], sizeof(uint32_t));
+                std::memcpy(&SettedDist, &luxuary_buf[5], sizeof(uint32_t));
+                std::memcpy(&SettedTmin, &luxuary_buf[9], sizeof(uint32_t));
+                std::memcpy(&SettedTmax, &luxuary_buf[13], sizeof(uint32_t));
+
+                std::cout << "Установленный AroundTemp=" << SettedAroundT << std::endl;
+                std::cout << "Установленный SettedDist=" << SettedDist << std::endl;
+                std::cout << "Установленный Tmin=" << SettedTmin << std::endl;
+                std::cout << "Установленный Tmax=" << SettedTmax << std::endl;
+
+                std::memcpy(&response_temp_data[1], &reserve_byte_1, sizeof(char));
+                std::memcpy(&response_temp_data[2], &reserve_byte_2, sizeof(char));
+                std::memcpy(&response_temp_data[3], &reserve_byte_3, sizeof(char));
+                */
