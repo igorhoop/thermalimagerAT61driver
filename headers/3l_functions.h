@@ -3,6 +3,12 @@ void initial();
 std::string GetContentFromFile(const std::string & filePath);
 void GetConfigForConnectCAM(std::string path);
 std::string GetCurrentTimestamp(int format);
+uint8_t CheckHTTPRequest(std::string request);
+void reinitial();
+void ConfigDevice();
+
+
+
 
 // callbacks
 void TempCallBackMy(char *pBuffer, long BufferLen, void* pContext);

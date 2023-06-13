@@ -17,9 +17,15 @@ std::string CapturePath;                    // путь к снимкам
 IRNETHANDLE pSdk;                 // дескриптор для работы с SDK
 struct ChannelInfo Device_Info;   // структура с информацией о подключении к устройству, заполняется автоматически чтением config-файла
 
+bool NeedInit = true;           // флаг сигнализирующий что требуется инициализация SDK
+
 
 int main()
 {
+
+    sdk_set_temp_unit(pSdk, Device_Info, 0);
+  
+
     float DeviceTemp;               // температура тепловизора
     char DeviceSN[30];              // массив для серийного номера
     char DevicePN[50];              // массив для part-номера
@@ -46,32 +52,13 @@ int main()
     std::cout << "Version: " << version << std::endl;
     std::cout << "Это драйвер для тепловизора AT61F (производства Infiray)." << std::endl;
     
-    initial(); // Инициализация SDK
+    if(NeedInit)
+    {
+        initial(); // Инициализация SDK
+    }
 
-    // после инициализации требуется установить функции-обработчики (callback'и)
-    SetSerialCallBack(pSdk, Device_Info, SerialCallBackMy, NULL);   // установка обработчика приема серийных данных
-
-
-    sdk_set_capture_format(pSdk, Device_Info, 4); // установка формата снимков, будет создаваться оба файла: jpg и irg
-    sdk_set_color_plate(pSdk, Device_Info, 2);    // установка цветовой гаммы
-
-    // Установка отрисовки экранных измерений
-    const char * Watermark = "3Logic Group Robotic Systems";
-    Custom_String osdContent;
-    osdContent.iFormat = 2;
-    osdContent.iFormatTime = 5;
-    osdContent.iShow= 1;
-    osdContent.iIndex = 3;
-    std::memcpy(osdContent.m_szString, Watermark, sizeof(osdContent.m_szString));
-    osdContent.iWidth = 100;
-    osdContent.iDeviceWidth = 640;
-    osdContent.iDeviceHeight = 512;
-    osdContent.iX = 5;
-    osdContent.iY = 50;
-    osdContent.iStringX = 5;
-    osdContent.iStringY = 490;
-    sdk_set_osd_display(pSdk, Device_Info, osdContent);
     
+
 
     
     std::cout << "Проверка подключения к тепловизору..." << std::endl;
@@ -124,20 +111,21 @@ int main()
     
 
     // !!!!! ЭТО УДАЛИТЬ ПОСЛЕ ТЕСТОВ !!!!!
-    envir_data.airTemp = 23 * 10000;
-    envir_data.emissivity = 0.8 *10000;
-    envir_data.reflectTemp = envir_data.airTemp;
-    envir_data.humidity = 2 * 10000;
-    envir_data.distance = 1 * 10000;
+    //envir_data.airTemp = 25 * 10000;
+    //envir_data.emissivity = 0.9 *10000;
+    //envir_data.reflectTemp = envir_data.airTemp;
+    //envir_data.humidity = 2 * 10000;
+    //envir_data.distance = 2 * 10000;
+    //sdk_set_envir_param(pSdk, Device_Info, envir_data); // функция для установки подготовленных параметров окружающей среды
 
-
-    sdk_set_envir_param(pSdk, Device_Info, envir_data); // функция для установки подготовленных параметров окружающей среды
-
+    
     
 
 
     while(true)
     {
+        reinitial();
+
         SENDPARAM OutputStructData = {0};
         GETPARAM InputStructData = {0};
 
@@ -168,6 +156,8 @@ int main()
         his_ip = inet_ntoa(ClientAddr.sin_addr);
         printf("\tIP-адрес подключившегося: %s \n", his_ip.c_str()) ;
         printf("\tЕго порт: %d\n", ClientAddr.sin_port);
+        std::cout << "\tВремя подключения: " << GetCurrentTimestamp(1) << std::endl;
+
 
         // получение данных из сокета
         bytes_recv = recv(exchange_socket, Receive_Buff, 100, 0);
@@ -178,13 +168,33 @@ int main()
             printf("0x%02X, ", Receive_Buff[i]); // отображаем принятые байты
         }
         std::cout << std::endl << std::endl;
-        
 
-        // берем первый байт чтобы узнать тип запроса
-        char Command = Receive_Buff[0];
-        printf("Тип запроса: %02X \n", Command);
-        std::string RestRequestText(Receive_Buff+1, bytes_recv-1); // сохраняем оставшуюся часть запроса в виде текста
-     
+
+        uint8_t Command;   // переменная куда мы положим номер команды, которая пришла
+
+        // Шаг проверки на HTTP
+        std::string currentRequest(Receive_Buff, bytes_recv);
+        uint8_t httpreq = CheckHTTPRequest(currentRequest);
+
+        
+        if(httpreq != 0xFF)
+        {
+            std::cout << "Это HTTP-запрос. Тип запроса:" << httpreq << std::endl;
+            Command = httpreq;
+            printf("Тип HTTP-запроса: %02X \n", Command);
+        }
+        else
+        {
+            std::cout << "Похоже это не HTTP-запрос. Тип запроса:" << httpreq << std::endl;
+            // берем первый байт чтобы узнать тип запроса
+            Command = Receive_Buff[0];
+            printf("Тип запроса: %02X \n", Command);
+        }
+       
+       std::string RestRequestText(Receive_Buff+1, bytes_recv-1); // сохраняем оставшуюся часть запроса в виде текста
+        
+        
+    
         // переменные в которые запишем подсчитанные вручную значения температур пикселей (при работе с IRG-файлом)
         int32_t CalcTavg = 0;
         int32_t CalcTmax = 0;
@@ -200,9 +210,11 @@ int main()
         int32_t Frame_Tmin = 0;
 
         // переменная от которой будет зависеть длина ответного пакета
-        int32_t answer_size = 0;
+        int32_t Answer_size = 0;
 
-        
+        int Setparams_result; // результат установки параметров (в команде 3)
+       
+
         
  
         switch(Command)
@@ -291,7 +303,7 @@ int main()
                 }
 
                 remove(TempPath.c_str());   // удаляем irg-файл, так как уже вытащили из него всю нужную информацию
-                answer_size=14;
+                Answer_size=14;
                 break;   
 
 
@@ -326,11 +338,11 @@ int main()
                     OutputStructData.error = 0x01;
                     std::cout << "\tОбратно отправлять будем с ошибкой, так как не выставлены температурные пороги" << std::endl;
                 }
-                answer_size = 14;
+                Answer_size = 14;
                 break;
 
 
-            case 3: // УСТАНОВКА ПАРАМЕТРОВ
+            case 3: // УСТАНОВКА ПАРАМЕТРОВ ОКРУЖАЮЩЕЙ СРЕДЫ И НУЖНЫХ НАМ ТЕМПЕРАТУРНЫХ ПОРОГОВ
                 std::cout << "Пришла команда на установку параметров" << std::endl;
 
                 if((bytes_recv) == sizeof(GETPARAM))
@@ -346,25 +358,31 @@ int main()
 
                 std::cout << "\tУстанавливаем эти значения..." << std::endl;
 
-                SettedTmin = InputStructData.min_t;
-                SettedTmax = InputStructData.max_t;
+                SettedTmin = InputStructData.min_t; // наш температурный порог
+                SettedTmax = InputStructData.max_t; // наш температурный порог
 
-
-                // !!! ЗАДАНИЕ ПАРАМЕТРОВ ДОРАБОТАТЬ
+                // физические параметры окружающей среды
                 envir_data.airTemp = InputStructData.around_temp * 10000;
-                //envir_data.emissivity = 20000;
                 envir_data.reflectTemp = envir_data.airTemp;
-                //envir_data.humidity = 200000;
                 envir_data.distance = InputStructData.distance * 10000;
+                //envir_data.humidity = ;       // установку влажности добавить когда потребуется
+                //envir_data.emissivity = ;     // установку излучаемости добавить когда потребуется
 
-                sdk_set_envir_param(pSdk, Device_Info, envir_data); // функция для установки подготовленных параметров окружающей среды
-
-                std::cout << "\tЗначения установлены" << std::endl;
-                TminmaxFlag=1; // поднимаем флаг о том что значения установлены
-
- 
-
-                answer_size = 4;
+                Setparams_result = sdk_set_envir_param(pSdk, Device_Info, envir_data); // функция для установки подготовленных параметров окружающей среды
+                if(Setparams_result != -1)
+                {
+                    std::cout << "\tЗначения установлены: " << Setparams_result <<  std::endl;
+                    TminmaxFlag=1; // поднимаем флаг о том что значения установлены
+                    OutputStructData.error = 0x00; // флаг для ответа что все хорошо
+                }
+                else
+                {
+                    std::cout << "\tНЕУДАЧА. Требуется реинициализация SDK (возможно камера отключалась)" << std::endl;
+                    NeedInit=true;
+                    OutputStructData.error = 0x03; // ошибка связи с тепловизором
+                }
+                
+                Answer_size = 4;
                 break;
 
 
@@ -402,7 +420,7 @@ int main()
 
                 CalcTpix = temp_data[NumPixel];
 
-                CalcTpix = (CalcTpix)/10-273.2;
+                CalcTpix = (CalcTpix)/10-273.2; // посчитанное значение температуры пикселя
 
 
                 std::cout << "\tCalcTpix=" << CalcTpix << std::endl;
@@ -414,25 +432,31 @@ int main()
                 }
                
                 remove(TempPath.c_str());
-                answer_size=5;
+                Answer_size=5;
+                break;
+
+                
+            case 0xF0: // сброс параметров окружающей среды
+                std::cout << "Пришел HTTP-запрос на сброс параметров окружающей среды" << std::endl;   
+                std::cout << sdk_reset_param(pSdk, Device_Info);
+                break;
+
+            case 0xF3: // 
+                std::cout << "Пришел HTTP-запрос на конфигурирование тепловизора" << std::endl;   
+                ConfigDevice();
                 break;
 
 
-            case 0: // reload
-                std::cout << "Reload Parameters" << std::endl;   
-                sdk_release(pSdk);
-                initial();
-                SetSerialCallBack(pSdk, Device_Info, SerialCallBackMy, NULL);
-                SetSnapCallBack(pSdk, Device_Info, SnapCallBackMy, NULL);
+            case 0x91: // принудительная реинициализация
+                std::cout << "Принудительная реинициализация...\n" << std::endl;   
+                reinitial();
                 break;
 
-            case 77:
+            case 92:
                 sdk_CapSingle(pSdk, Device_Info);
-
                 break;
 
-            case 88: // проверка доступности камеры костылем "считать температуру камеры"
-
+            case 93: // проверка доступности камеры костылем "считать температуру камеры"
             std::cout << "Проверка камеры..." << std::endl;
                 subresult = sdk_get_camera_temp(pSdk, &DeviceTemp);
                 if(subresult==0)
@@ -456,14 +480,14 @@ int main()
 
 
         // ФОРМИРОВАНИЕ ОТВЕТА
-        int result = send(exchange_socket, &OutputStructData, answer_size, 0);
+        int result = send(exchange_socket, &OutputStructData, Answer_size, 0);
         std::cout << "Отправляем обратно количество байт: " << result << std::endl;
 
         // покажем в консоли что было отправлено
         char ArrayStructData[100];  // сюда скопируем байты структуры чтобы вывести в консоли побайтово  
-        std::memcpy(ArrayStructData, &OutputStructData, sizeof(OutputStructData));
+        std::memcpy(ArrayStructData, &OutputStructData, Answer_size);
         std::cout << "\tСостав ответной посылки: ";
-        for(int i=0; i < sizeof(OutputStructData); i++)
+        for(int i=0; i < Answer_size; i++)
         {
             printf("0x%02X, ", ArrayStructData[i]); // отображаем принятые байты
         }
@@ -488,7 +512,7 @@ int main()
 
     //sdk_osd_switch(SdkHandle, Device_Info, 1);
 
-    sdk_set_temp_unit(SdkHandle, Device_Info, 0);
+    
     
     Alarm_Config alarm_config;
     
@@ -521,7 +545,7 @@ int main()
     sdk_set_area_pos(SdkHandle, Device_Info, 5, area1_pos);
     */
 
-    //sdk_reset_param(SdkHandle, Device_Info);
+    
 
     //sdk_remove_area_pos(SdkHandle, Device_Info, 6, 2);
 
@@ -531,21 +555,9 @@ int main()
 
     unsigned short port; 
     sdk_get_onvif_port(SdkHandle, Device_Info, &port);
-
     std::cout << port;
 
 
-    char filename[30] = "/home/hoop/file999";
-    int iIndex = 4;
-    int iWidth = 640;
-    int iHeight = 512;
-    int nnn = sdk_get_pseudo_color_pic(filename, iIndex, iWidth, iHeight);
-    std::cout << nnn;
-
-    //exit(1);
-    std::cout << "\n\nqwerty: " << filename << "\n" << iIndex << "\n" << iWidth << "\n" << iHeight << std::endl;
-
-    exit(1);
 
     
     while(true)
@@ -632,4 +644,4 @@ int main()
 
 
     //int res = SetTempCallBack(pSdk, TempCallBackMy, NULL);
-    //SetSnapCallBack(pSdk, Device_Info, SnapCallBackMy, NULL);
+    

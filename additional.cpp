@@ -3,13 +3,105 @@
 #include "headers/3l_functions.h"
 #include <ctime>
 #include <cstdlib>
+#include <cstring>
 
 
 extern IRNETHANDLE pSdk;
 extern struct ChannelInfo Device_Info;
 extern std::string CapturePath;
+extern bool NeedInit;
 
-// === Инициализация SDK и подключение к тевловизору ===
+
+
+
+
+
+
+// =========== ПРОВЕРКА HTTP-ЗАПРОСОВ  ===========
+uint8_t CheckHTTPRequest(std::string request)
+{
+    std::string find_substring;     // для поиска подстрок
+
+    // проверка что пришел запрос на MONITOR
+    find_substring = "GET /reset_envir/";
+    auto position = request.find(find_substring);
+
+    if(position != std::string::npos)
+    {     
+        return 0xF0; // сброс значений окружающей среды, по умолчанию: AirTemp 25, Emissivity 1, ReflectTemp 25, Humidity 1, Distance 2   
+    }
+
+    //  проверка что пришел запрос на логи
+    find_substring = "GET /get_logs/";
+    position = request.find(find_substring);
+    if(position != std::string::npos)
+    {     
+        return 0xF1; // возврат HTML-странички
+    }
+
+    //  проверка что пришел запрос на конфигурационные параметры тепловизора
+    find_substring = "GET /get_params/";
+    position = request.find(find_substring);
+    if(position != std::string::npos)
+    {     
+        return 0xF2; // возврат HTML-странички
+    }
+
+    // запрос на установку конфигурационных параметров тепловизора
+    find_substring = "GET /set_params/";
+    position = request.find(find_substring);
+    if(position != std::string::npos)
+    {     
+        return 0xF3; 
+    }
+
+
+
+    return 0xFF; // если ничего не подошло
+}
+
+
+
+// === Конфигурирование тепловизора ===
+void ConfigDevice()
+{
+    sdk_set_color_plate(pSdk, Device_Info, 2);    // установка цветовой гаммы
+
+    // Установка отрисовки экранных измерений
+    const char * Watermark = "3Logic Group Robotic Systems";
+    Custom_String osdContent;
+    osdContent.iFormat = 2;
+    osdContent.iFormatTime = 5;
+    osdContent.iShow= 1;
+    osdContent.iIndex = 3;
+    std::memcpy(osdContent.m_szString, Watermark, sizeof(osdContent.m_szString));
+    osdContent.iWidth = 100;
+    osdContent.iDeviceWidth = 640;
+    osdContent.iDeviceHeight = 512;
+    osdContent.iX = 5;
+    osdContent.iY = 50;
+    osdContent.iStringX = 5;
+    osdContent.iStringY = 490;
+    sdk_set_osd_display(pSdk, Device_Info, osdContent);
+
+}
+
+
+
+// === Реинициализация SDK ===
+void reinitial()
+{
+    if(NeedInit) // реиницициализация SDK в случае сбоев (отключение питания камеры)
+    {
+        std::cout << "Реинициализация SDK..." << std::endl;
+        sdk_release(pSdk);
+        initial();
+    }
+
+}
+
+
+// === Инициализация SDK, подключение к тепловизору, его настройка ===
 void initial()
 {
     std::cout << "Логинимся в SDK..." << std::endl;
@@ -35,6 +127,15 @@ void initial()
     std::cout << (isLogin?"\tПрименение параметров к SDK - ОК\n":"Применение параметров к SDK - FAIL\n") << std::endl;
     if(!isLogin)
         exit(1);
+
+    // после инициализации требуется установить функции-обработчики (callback'и)
+    SetSerialCallBack(pSdk, Device_Info, SerialCallBackMy, NULL);   // установка обработчика приема серийных данных
+
+    sdk_set_capture_format(pSdk, Device_Info, 4); // установка формата снимков, будет создаваться оба файла: jpg и irg
+
+
+    NeedInit=false; // отключаем необходимость инициализации, чтоб не инициализироваться повторно
+
 }
 
 
@@ -123,3 +224,4 @@ std::string GetCurrentTimestamp(int format)
     std::string date_string = date_format;
     return date_string;   
 }
+
