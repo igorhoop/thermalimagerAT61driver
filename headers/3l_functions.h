@@ -1,11 +1,18 @@
-void initial();
+void InitialSDK();
+int DeviceConnect();
 
 std::string GetContentFromFile(const std::string & filePath);
 void GetConfigForConnectCAM(std::string path);
 std::string GetCurrentTimestamp(int format);
 uint8_t CheckHTTPRequest(std::string request);
-void reinitial();
+void ReinitialAndConnect();
 void ConfigDevice();
+int PingDevice();
+int GetDeviceInfo();
+int WaitDevice();
+
+// threads
+void * PingDeviceThread(void * args);
 
 
 

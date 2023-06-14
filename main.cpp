@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstring>
 #include <string_view>
+#include <pthread.h>
 
 
 constexpr std::string_view version = "1.0"; // версия это программы
@@ -17,18 +18,12 @@ std::string CapturePath;                    // путь к снимкам
 IRNETHANDLE pSdk;                 // дескриптор для работы с SDK
 struct ChannelInfo Device_Info;   // структура с информацией о подключении к устройству, заполняется автоматически чтением config-файла
 
-bool NeedInit = true;           // флаг сигнализирующий что требуется инициализация SDK
+//bool NeedInit = true;           // флаг сигнализирующий что требуется инициализация SDK
 
 
 int main()
 {
-
-    sdk_set_temp_unit(pSdk, Device_Info, 0);
   
-
-    float DeviceTemp;               // температура тепловизора
-    char DeviceSN[30];              // массив для серийного номера
-    char DevicePN[50];              // массив для part-номера
     Area_Temp area_temp = { 0 };    // структура куда SDK по запросу будет класть температурные данные текущего кадра
     envir_param envir_data;         //структура для установки физических параметров (окружающей среды)
 
@@ -52,34 +47,31 @@ int main()
     std::cout << "Version: " << version << std::endl;
     std::cout << "Это драйвер для тепловизора AT61F (производства Infiray)." << std::endl;
     
-    if(NeedInit)
+    
+    InitialSDK(); // Инициализация SDK
+ 
+    while(DeviceConnect()) // <---- ПОСЛЕ ИНИЦИАЛИЗАЦИЯ НАДО ПОПЫТКИ НАЛАДИТЬ СВЯЗЬ
     {
-        initial(); // Инициализация SDK
+        sleep(5);
     }
-
     
 
+    pthread_t thread;
+    int result_thread;
+    result_thread = pthread_create(&thread, NULL, &PingDeviceThread, NULL);
 
-    
-    std::cout << "Проверка подключения к тепловизору..." << std::endl;
-    int subresult; // вспомогательная переменная
-    subresult = sdk_get_camera_temp(pSdk, &DeviceTemp);
-  
-    if(subresult == 0)
-    {
-        std::cout << "\tСигнал от тепловизора есть" << std::endl;
-        sdk_get_SN_PN(pSdk, Device_Info, DeviceSN, DevicePN);
-        std::cout << "\tS/n=" << DeviceSN << std::endl;
-        std::cout << "\tP/n=" << DevicePN << std::endl;
-        sdk_get_camera_temp(pSdk, &DeviceTemp);
-        std::cout << "\tDeviceTemp: " << DeviceTemp << " C°\n" << std::endl;
-    }
-    else
-    {
-        std::cout << "\tСигнала от камеры нет. Завершаемся\n" << std::endl;
-        return 0;
-    }
 
+    //pthread_join
+
+    //sleep(1000);
+
+    //exit(1);
+
+    //while(PingDevice())
+   // {
+     //   std::cout << "Неудачное подключение к тепловизору. Пробуем снова" << std::endl;
+        
+    //}
 
     // СЕТЕВЫЕ УСТАНОВКИ
     int bytes_send;         // количество отправленных клиенту байт
@@ -108,30 +100,17 @@ int main()
     char * Receive_Buff = new char[100];    // сетевой приемный буфер
 
 
-    
-
-    // !!!!! ЭТО УДАЛИТЬ ПОСЛЕ ТЕСТОВ !!!!!
-    //envir_data.airTemp = 25 * 10000;
-    //envir_data.emissivity = 0.9 *10000;
-    //envir_data.reflectTemp = envir_data.airTemp;
-    //envir_data.humidity = 2 * 10000;
-    //envir_data.distance = 2 * 10000;
-    //sdk_set_envir_param(pSdk, Device_Info, envir_data); // функция для установки подготовленных параметров окружающей среды
-
-    
-    
-
 
     while(true)
     {
-        reinitial();
+        std::array<uint8_t, 327680> response_temp_data = {0}; // массив для всех пикселей
+
+        //reinitial();
 
         SENDPARAM OutputStructData = {0};
         GETPARAM InputStructData = {0};
 
         std::string TempPath = CapturePath;    // начало формируемого пути для файла (берется из config файла)
-        
-
 
         // СОЗДАНИЕ ИМЕНИ СНИМКОВ И ПОДКАТАЛОГОВ ДЛЯ ИХ МЕСТОПОЛОЖЕНИЯ
         std::string CaptureName = "";          // сюда будет класться имя снимка
@@ -213,13 +192,9 @@ int main()
         int32_t Answer_size = 0;
 
         int Setparams_result; // результат установки параметров (в команде 3)
-       
 
-        
- 
         switch(Command)
         {
-            
             case 1: // СДЕЛАТЬ СНИМОК
                 // сначала формируем имя снимка
                 CaptureName = RestRequestText;
@@ -281,12 +256,10 @@ int main()
                     std::cout << "\tCalcTmin=" << CalcTmin << std::endl;
                     std::cout << "\tCalcTmax=" << CalcTmax << std::endl;
 
-
                     OutputStructData.average_t = CalcTavg;
                     OutputStructData.min_t = CalcTmin;
                     OutputStructData.max_t = CalcTmax;
                     
-
                     if(TminmaxFlag == 1)
                     {
                         if((CalcTmax >= SettedTmax) && (CalcTmin <= SettedTmin))
@@ -378,7 +351,7 @@ int main()
                 else
                 {
                     std::cout << "\tНЕУДАЧА. Требуется реинициализация SDK (возможно камера отключалась)" << std::endl;
-                    NeedInit=true;
+                    
                     OutputStructData.error = 0x03; // ошибка связи с тепловизором
                 }
                 
@@ -390,7 +363,6 @@ int main()
                 std::cout << "Пришла команда на чтение температуры пикселя" << std::endl;
                 CaptureName="temp_pixel";
                 std::cout << "Принята команда на чтение температуры пикселя. Сначала делаем снимок, имя для него берем временное: " << CaptureName << std::endl;
-
 
                 mkdir(TempPath.c_str(), 0777);          // создаем основной каталог если он отсутствует
                 TodayDirName = GetCurrentTimestamp(0);  // готовимся к созданию подкаталога с именем-датой (сегодняшней)
@@ -435,6 +407,42 @@ int main()
                 Answer_size=5;
                 break;
 
+            case 5: // запрос карты пикселей
+                std::cout << "Пришла команда на массив всех пикселей" << std::endl;
+                
+                CaptureName="temp_pixel";
+                std::cout << "Принята команда на чтение температуры пикселя. Сначала делаем снимок, имя для него берем временное: " << CaptureName << std::endl;
+
+                mkdir(TempPath.c_str(), 0777);          // создаем основной каталог если он отсутствует
+                TodayDirName = GetCurrentTimestamp(0);  // готовимся к созданию подкаталога с именем-датой (сегодняшней)
+                TempPath.append(TodayDirName);          // добавляем к основному пути имя подкаталога-дату
+                mkdir(TempPath.c_str(), 0777);          // создаем подкаталог-дату если он отсутствует
+                TempPath.append("/");                   // добавляем заход в этот подкаталог
+
+                TempPath.append(CaptureName);
+                std::cout << "Итоговый путь сохранения снимка: " << TempPath << std::endl;
+
+                // делаем jpeg и irg файл
+                sdk_snapshot(pSdk, Device_Info, 1, (char *) TempPath.c_str());
+
+                // далее извлекаем из irg файла данные
+                TempPath.append(".irg");
+                sdk_get_irg_data( (char *) TempPath.c_str(), 4, temp_data, image_data);
+                
+                for(int i=0; i < 327680; i++)
+                {
+                    response_temp_data[i] = temp_data[i]/10 - 273.2;
+                }
+
+
+                std::cout << "\tМассив подготовлен" << std::endl;
+
+               
+                remove(TempPath.c_str());
+                
+                Answer_size=327680;
+                break;    
+
                 
             case 0xF0: // сброс параметров окружающей среды
                 std::cout << "Пришел HTTP-запрос на сброс параметров окружающей среды" << std::endl;   
@@ -449,38 +457,30 @@ int main()
 
             case 0x91: // принудительная реинициализация
                 std::cout << "Принудительная реинициализация...\n" << std::endl;   
-                reinitial();
+                ReinitialAndConnect();
                 break;
 
-            case 92:
-                sdk_CapSingle(pSdk, Device_Info);
-                break;
 
-            case 93: // проверка доступности камеры костылем "считать температуру камеры"
-            std::cout << "Проверка камеры..." << std::endl;
-                subresult = sdk_get_camera_temp(pSdk, &DeviceTemp);
-                if(subresult==0)
-                {
-                    std::cout << "\tКамера на связи" << std::endl;
-                }
-                else
-                {
-                    std::cout << "\tКамера не отвечает" << std::endl;       
-                }
-                break;    
-                
-              
+
+            
 
             default: 
                 std::cout << "неизвестный тип запроса" << std::endl;
                 break;
-
-            
         }
 
 
         // ФОРМИРОВАНИЕ ОТВЕТА
-        int result = send(exchange_socket, &OutputStructData, Answer_size, 0);
+        int result;
+        if(Answer_size==327680)
+        {
+            result = send(exchange_socket, &response_temp_data, Answer_size, 0);
+            std::cout << "Отправляем обратно количество байт: " << result << std::endl;
+
+        }
+        else
+        {
+        result = send(exchange_socket, &OutputStructData, Answer_size, 0);
         std::cout << "Отправляем обратно количество байт: " << result << std::endl;
 
         // покажем в консоли что было отправлено
@@ -492,7 +492,7 @@ int main()
             printf("0x%02X, ", ArrayStructData[i]); // отображаем принятые байты
         }
         std::cout << std::endl << std::endl << std::endl;
-
+        }
 
         close(exchange_socket); 
         continue;
@@ -607,6 +607,10 @@ int main()
 
 
 
+            case 92:
+                sdk_CapSingle(pSdk, Device_Info);
+                break;
+
 */
 
 
@@ -619,7 +623,7 @@ int main()
 
                 /*
 
-                std::array<uint8_t, 14> response_temp_data = {0};
+                
 
 
 

@@ -9,8 +9,6 @@
 extern IRNETHANDLE pSdk;
 extern struct ChannelInfo Device_Info;
 extern std::string CapturePath;
-extern bool NeedInit;
-
 
 
 
@@ -23,7 +21,7 @@ uint8_t CheckHTTPRequest(std::string request)
     std::string find_substring;     // для поиска подстрок
 
     // проверка что пришел запрос на MONITOR
-    find_substring = "GET /reset_envir/";
+    find_substring = "GET /reset_envir";
     auto position = request.find(find_substring);
 
     if(position != std::string::npos)
@@ -31,33 +29,93 @@ uint8_t CheckHTTPRequest(std::string request)
         return 0xF0; // сброс значений окружающей среды, по умолчанию: AirTemp 25, Emissivity 1, ReflectTemp 25, Humidity 1, Distance 2   
     }
 
-    //  проверка что пришел запрос на логи
-    find_substring = "GET /get_logs/";
-    position = request.find(find_substring);
-    if(position != std::string::npos)
-    {     
-        return 0xF1; // возврат HTML-странички
-    }
-
-    //  проверка что пришел запрос на конфигурационные параметры тепловизора
-    find_substring = "GET /get_params/";
-    position = request.find(find_substring);
-    if(position != std::string::npos)
-    {     
-        return 0xF2; // возврат HTML-странички
-    }
-
     // запрос на установку конфигурационных параметров тепловизора
-    find_substring = "GET /set_params/";
+    find_substring = "GET /set_params";
     position = request.find(find_substring);
     if(position != std::string::npos)
     {     
         return 0xF3; 
     }
 
-
-
     return 0xFF; // если ничего не подошло
+}
+
+
+void * PingDeviceThread(void * args)
+{
+    int vsp = 0;
+    Area_Temp local_area_temp;
+    while(1)
+    {
+        vsp = PingDevice();
+        if(vsp == 0)
+        {
+            std::cout << "\tСвязь с устройством: ОК" << std::endl;
+            sleep(10);
+        }
+        else 
+        {
+            std::cout << "\tСвязи нет. Пытаемся наладить..." << std::endl;
+            WaitDevice();
+            ReinitialAndConnect();
+        }
+    }
+}
+
+
+int WaitDevice()
+{
+    Area_Temp test_area_temp;
+    while(sdk_get_temp_data(pSdk, Device_Info, 256, test_area_temp)!=0)
+    {
+        std::cout << "\tОжидание ответа устройства..." << std::endl;
+    }
+
+    return 0;
+}
+
+
+// === Проверка доступности тепловизора ===
+int PingDevice()
+{
+    float DeviceTemp;
+    if(sdk_get_camera_temp(pSdk, &DeviceTemp)==0)
+    {
+        std::cout << "\tпинг есть" << std::endl;
+        return 0;
+    }
+    else
+    {
+        std::cout << "\tпинга нет" << std::endl;
+        return 1;
+    }
+}
+
+
+// === Получение информации о тепловизоре ===
+int GetDeviceInfo()
+{
+    float DeviceTemp;       // сюда положим температуру тепловизора
+    char DeviceSN[30];      // массив для серийного номера
+    char DevicePN[50];      // массив для part-номера
+
+    std::cout << "Получаем информацию об устройстве..." << std::endl;
+    if(sdk_get_camera_temp(pSdk, &DeviceTemp)==0)
+    {
+        std::cout << "\tOK. Устройство на связи" << std::endl;
+        sdk_get_SN_PN(pSdk, Device_Info, DeviceSN, DevicePN);
+        std::cout << "\tS/n=" << DeviceSN << std::endl;
+        std::cout << "\tP/n=" << DevicePN << std::endl;
+        sdk_get_camera_temp(pSdk, &DeviceTemp);
+        std::cout << "\tDeviceTemp: " << DeviceTemp << " C°\n" << std::endl;
+    }
+    else
+    {
+        std::cout << "\tFAIL. Устройство не отвечает" << std::endl;
+        return 1;
+    }
+
+    return 0;
 }
 
 
@@ -65,6 +123,8 @@ uint8_t CheckHTTPRequest(std::string request)
 // === Конфигурирование тепловизора ===
 void ConfigDevice()
 {
+
+
     sdk_set_color_plate(pSdk, Device_Info, 2);    // установка цветовой гаммы
 
     // Установка отрисовки экранных измерений
@@ -84,25 +144,43 @@ void ConfigDevice()
     osdContent.iStringY = 490;
     sdk_set_osd_display(pSdk, Device_Info, osdContent);
 
+
+
+    //envir_data.airTemp = 25 * 10000;
+    //envir_data.emissivity = 0.9 *10000;
+    //envir_data.reflectTemp = envir_data.airTemp;
+    //envir_data.humidity = 2 * 10000;
+    //envir_data.distance = 2 * 10000;
+    //sdk_set_envir_param(pSdk, Device_Info, envir_data); // функция для установки подготовленных параметров окружающей среды
+
+       // установка формата снимков, будет создаваться оба файла: jpg и irg. ДОЛЖЕН БЫТЬ ВКЛЮЧЕН ТЕПЛОВИЗОР, иначе подвиснет
+    int res = sdk_set_capture_format(pSdk, Device_Info, 4);
+    std::cout << "\tУстановка формата снимков: " << res << std::endl;
+    
+
+    sdk_set_temp_unit(pSdk, Device_Info, 0);
+
+
 }
 
 
 
 // === Реинициализация SDK ===
-void reinitial()
+void ReinitialAndConnect()
 {
-    if(NeedInit) // реиницициализация SDK в случае сбоев (отключение питания камеры)
-    {
-        std::cout << "Реинициализация SDK..." << std::endl;
+    //if(NeedInit) // реиницициализация SDK в случае сбоев (отключение питания камеры)
+    //{
+        std::cout << "Реинициализация SDK и переподключение..." << std::endl;
         sdk_release(pSdk);
-        initial();
-    }
+        InitialSDK();
+        DeviceConnect();
+    //}
 
 }
 
 
 // === Инициализация SDK, подключение к тепловизору, его настройка ===
-void initial()
+void InitialSDK() // здесь не должны быть функции SDK, которые могут подвиснуть программу
 {
     std::cout << "Логинимся в SDK..." << std::endl;
 
@@ -127,16 +205,32 @@ void initial()
     std::cout << (isLogin?"\tПрименение параметров к SDK - ОК\n":"Применение параметров к SDK - FAIL\n") << std::endl;
     if(!isLogin)
         exit(1);
-
-    // после инициализации требуется установить функции-обработчики (callback'и)
-    SetSerialCallBack(pSdk, Device_Info, SerialCallBackMy, NULL);   // установка обработчика приема серийных данных
-
-    sdk_set_capture_format(pSdk, Device_Info, 4); // установка формата снимков, будет создаваться оба файла: jpg и irg
-
-
-    NeedInit=false; // отключаем необходимость инициализации, чтоб не инициализироваться повторно
+    
+    std::cout << "Инициализация SDK завершена" << std::endl;
 
 }
+
+
+int DeviceConnect()
+{
+    std::cout << "Попытка подключения к устройству..." << std::endl;
+    if(WaitDevice()==0)
+    {
+        std::cout << "\tСвязь ОК. Устанавливаем функции-обработчики..." << std::endl;
+        // после инициализации требуется установить функции-обработчики (callback'и). Настройка относящайся к SDK, а значит не подвиснет программу при выключенном устройстве
+        int res = SetSerialCallBack(pSdk, Device_Info, SerialCallBackMy, NULL);   // установка обработчика приема серийных данных
+        std::cout << "\tУстановка функций обработчиков: " << res << std::endl;
+
+        return 0;
+    }
+    else
+    {
+        std::cout << "Нет пинга. Пробовать подключиться не будем" << std::endl;
+        return 1;
+    }
+}
+
+
 
 
 
