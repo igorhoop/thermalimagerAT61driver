@@ -9,7 +9,13 @@
 extern IRNETHANDLE pSdk;
 extern struct ChannelInfo Device_Info;
 extern std::string CapturePath;
+extern envir_param envir_data;
 
+extern std::string AirTemp;
+extern std::string Emissivity;
+//extern std::string ReflectTemp;
+extern std::string Humidity;
+extern std::string Distance;
 
 
 
@@ -58,6 +64,7 @@ void * PingDeviceThread(void * args)
             std::cout << "\tСвязи нет. Пытаемся наладить..." << std::endl;
             WaitDevice();
             ReinitialAndConnect();
+            ConfigDevice();
         }
     }
 }
@@ -65,6 +72,7 @@ void * PingDeviceThread(void * args)
 
 int WaitDevice()
 {
+    std::cerr << "\tОжидание ответа устройства..." << std::endl;
     Area_Temp test_area_temp;
     while(sdk_get_temp_data(pSdk, Device_Info, 256, test_area_temp)!=0)
     {
@@ -81,12 +89,12 @@ int PingDevice()
     float DeviceTemp;
     if(sdk_get_camera_temp(pSdk, &DeviceTemp)==0)
     {
-        std::cout << "\tпинг есть" << std::endl;
+        //std::cout << "\tпинг есть" << std::endl;
         return 0;
     }
     else
     {
-        std::cout << "\tпинга нет" << std::endl;
+        //std::cout << "\tпинга нет" << std::endl;
         return 1;
     }
 }
@@ -123,9 +131,42 @@ int GetDeviceInfo()
 // === Конфигурирование тепловизора ===
 void ConfigDevice()
 {
+    /*
+        после отключения тепловизора по питанию слетают следующие вещи:
+            v: Формат снимка нужно нужно перезадать, иначе jpeg и irg файлы создаваться не будут,
+                при этом из SDK будут выдаваться последние данные считанные из irg 
+            v: Цветовую палитру нужно перезадать: но выдержать перед этим паузу?
+            v: Единицы измерения (цельсии)
+
+        параметры окружающей среды хранятся в устройстве?
+    */
+    std::cout << "Конфигурирование устройства..." << std::endl;
+    // установка формата снимков, будет создаваться оба файла: jpg и irg. ДОЛЖЕН БЫТЬ ВКЛЮЧЕН ТЕПЛОВИЗОР, иначе подвиснет
+    int res = sdk_set_capture_format(pSdk, Device_Info, 4);
+    res==0?std::cout << "\tУстановка формата снимков: ОК":std::cout << "\tУстановка формата снимков: FAIL";
+
+    while(sdk_set_color_plate(pSdk, Device_Info, 2) != 0)    // установка цветовой гаммы
+    {
+        std::cout << "Попытка установить палитру" << std::endl;
+        sleep(1);
+    }
+    std::cout << "\tУстановка палитры: ОК" << std::endl;
 
 
-    sdk_set_color_plate(pSdk, Device_Info, 2);    // установка цветовой гаммы
+    //while(sdk_set_temp_unit(pSdk, Device_Info, 0) != 0)    // установка единиц измерения
+    //{
+    //    std::cout << "Попытка установить единицы измерения" << std::endl;
+    //    sleep(1);
+    //}
+    //std::cout << "\tУстановка единиц измерения: ОК" << std::endl;
+
+
+
+//    std::cout << "\tУстановка формата снимков: " << res << std::endl;
+
+    /*
+    
+
 
     // Установка отрисовки экранных измерений
     const char * Watermark = "3Logic Group Robotic Systems";
@@ -153,13 +194,13 @@ void ConfigDevice()
     //envir_data.distance = 2 * 10000;
     //sdk_set_envir_param(pSdk, Device_Info, envir_data); // функция для установки подготовленных параметров окружающей среды
 
-       // установка формата снимков, будет создаваться оба файла: jpg и irg. ДОЛЖЕН БЫТЬ ВКЛЮЧЕН ТЕПЛОВИЗОР, иначе подвиснет
-    int res = sdk_set_capture_format(pSdk, Device_Info, 4);
-    std::cout << "\tУстановка формата снимков: " << res << std::endl;
+
+
     
+*/
 
-    sdk_set_temp_unit(pSdk, Device_Info, 0);
-
+    SetEnvirParams();
+    
 
 }
 
@@ -168,14 +209,10 @@ void ConfigDevice()
 // === Реинициализация SDK ===
 void ReinitialAndConnect()
 {
-    //if(NeedInit) // реиницициализация SDK в случае сбоев (отключение питания камеры)
-    //{
-        std::cout << "Реинициализация SDK и переподключение..." << std::endl;
+        std::cout << "Реинициализация SDK и переконнект..." << std::endl;
         sdk_release(pSdk);
         InitialSDK();
         DeviceConnect();
-    //}
-
 }
 
 
@@ -259,6 +296,25 @@ void GetConfigForConnectCAM(std::string path)
     CapturePath = config.substr(vsp1+12, vsp2-vsp1-12);
 
 
+    vsp1 = (int) config.find("AirTemp=");
+    vsp2 = (int) config.find(";", vsp2+1);
+    AirTemp = config.substr(vsp1+8, vsp2-vsp1-8);
+
+    vsp1 = (int) config.find("Emissivity=");
+    vsp2 = (int) config.find(";", vsp2+1);
+    Emissivity = config.substr(vsp1+11, vsp2-vsp1-11);
+
+    //vsp1 = (int) config.find("ReflectTemp=");
+    //vsp2 = (int) config.find(";", vsp2+1);
+    //ReflectTemp = config.substr(vsp1+12, vsp2-vsp1-12);
+
+    vsp1 = (int) config.find("Humidity=");
+    vsp2 = (int) config.find(";", vsp2+1);
+    Humidity = config.substr(vsp1+9, vsp2-vsp1-9);
+
+    vsp1 = (int) config.find("Distance=");
+    vsp2 = (int) config.find(";", vsp2+1);
+    Distance = config.substr(vsp1+9, vsp2-vsp1-9);
 
 
     std::cout << "Читаем данные подключения к камере..." << std::endl;
@@ -266,6 +322,13 @@ void GetConfigForConnectCAM(std::string path)
     std::cout << "\tPORT: " << port << std::endl;
     std::cout << "\tLOGIN: " << login << std::endl;
     std::cout << "\tPASS: " << pass << std::endl;
+
+    std::cout << "Указанные параметры окружающей среды..." << std::endl;
+    std::cout << "\tAirTemp: " << AirTemp << std::endl;
+    std::cout << "\tEmissivity: " << Emissivity << std::endl;
+    //std::cout << "\tReflectTemp: " << ReflectTemp << std::endl;
+    std::cout << "\tHumidity: " << Humidity << std::endl;
+    std::cout << "\tDistance: " << Distance << std::endl;
 
     std::cout << "\n\n\tПуть для сохранения снимков:" << CapturePath <<  std::endl;
 
@@ -276,9 +339,81 @@ void GetConfigForConnectCAM(std::string path)
     strcpy_s(Device_Info.szPWD, pass.c_str());
     Device_Info.wPortNum = atoi(port.c_str());
     Device_Info.channel = 0; // что за канал, одному богу известно
+
+
+
 }
 
 
+
+int SetEnvirParams()
+{
+    std::cout << "Устанавливаем параметры окружающей среды" << std::endl;
+    envir_param envir_data;         //структура для установки физических параметров (окружающей среды)
+
+    envir_data.airTemp = strtof(AirTemp.c_str(), nullptr) * 10000;
+    envir_data.emissivity = strtof(Emissivity.c_str(), nullptr) * 10000;
+    envir_data.reflectTemp = envir_data.airTemp;
+    envir_data.humidity = strtof(Humidity.c_str(), nullptr) * 10000;
+    envir_data.distance = strtof(Distance.c_str(), nullptr) * 10000;
+
+    if(sdk_set_envir_param(pSdk, Device_Info, envir_data)==-1)
+    {
+        std::cout << "Не получилось установить параметры окружающей среды" << std::endl;
+        return 1;
+    }
+        std::cout << "Установка параметров окружающей среды: ОК" << std::endl;
+
+
+    return 0;
+}
+
+
+
+// =========== ВПИСАТЬ В ФАЙЛ ===========
+int RewriteFileContent(int target, std::string value)
+{   
+    std::string content = GetContentFromFile("config");
+    int vsp1;
+    int vsp2;
+
+    switch(target)
+    {
+        case 1: // установка окружающей температуры
+            vsp1 = (int) content.find("AirTemp=");
+            vsp2 = (int) content.find(";", vsp1);
+            content.erase(vsp1+8, vsp2-vsp1-8);
+            content.insert(vsp1+8, value);
+            break;
+
+        case 2:
+            vsp1 = (int) content.find("Distance=");
+            vsp2 = (int) content.find(";", vsp1);
+            content.erase(vsp1+9, vsp2-vsp1-9);
+            content.insert(vsp1+9, value);
+            break;
+
+        case 3:
+            vsp1 = (int) content.find("Emissivity=");
+            vsp2 = (int) content.find(";", vsp1);
+            content.erase(vsp1+11, vsp2-vsp1-11);
+            content.insert(vsp1+11, value);
+            break;
+
+        case 4:
+            vsp1 = (int) content.find("Humidity=");
+            vsp2 = (int) content.find(";", vsp1);
+            content.erase(vsp1+9, vsp2-vsp1-9);
+            content.insert(vsp1+9, value);
+            break;
+
+    }
+
+    std::ofstream file("config");
+    file << content;
+
+    return 0;
+}
 
 
 // =========== ВЗЯТЬ СОДЕРЖИМОЕ ФАЙЛА ===========

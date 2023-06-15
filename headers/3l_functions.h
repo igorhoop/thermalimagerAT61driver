@@ -10,6 +10,8 @@ void ConfigDevice();
 int PingDevice();
 int GetDeviceInfo();
 int WaitDevice();
+int SetEnvirParams();
+int RewriteFileContent(int target, std::string value);
 
 // threads
 void * PingDeviceThread(void * args);
@@ -33,10 +35,24 @@ struct SENDPARAM {
  uint8_t signal;
 };
 
-struct GETPARAM {
+struct GETAIRTEMP {
  uint8_t cmd; 
- int32_t around_temp;
- int32_t distance;
+ int8_t around_temp;
+};
+
+struct GETDISTANCE {
+ uint8_t cmd; 
+ uint8_t distance;
+};
+
+struct GETENVIRPARAMS {
+ uint8_t cmd; 
+ float emissivity;
+ float humidity;
+};
+
+struct GETTEMPLIM {
+ uint8_t cmd; 
  int32_t min_t;
  int32_t max_t;
 };

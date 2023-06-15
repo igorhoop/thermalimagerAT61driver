@@ -12,20 +12,27 @@
 constexpr std::string_view version = "1.0"; // версия это программы
 std::string CapturePath;                    // путь к снимкам
 
+std::string AirTemp;
+std::string Emissivity;
+std::string ReflectTemp;
+std::string Humidity;
+std::string Distance;
+
 #define NETPORT 30001             // порт на который сядет эта программа
 
 
 IRNETHANDLE pSdk;                 // дескриптор для работы с SDK
 struct ChannelInfo Device_Info;   // структура с информацией о подключении к устройству, заполняется автоматически чтением config-файла
 
-//bool NeedInit = true;           // флаг сигнализирующий что требуется инициализация SDK
+
 
 
 int main()
 {
   
     Area_Temp area_temp = { 0 };    // структура куда SDK по запросу будет класть температурные данные текущего кадра
-    envir_param envir_data;         //структура для установки физических параметров (окружающей среды)
+    
+
 
     // Устанавливаемые физические параметры для тепловизора
     int32_t SettedDist = 0;         // расстояние до объекта
@@ -60,18 +67,9 @@ int main()
     int result_thread;
     result_thread = pthread_create(&thread, NULL, &PingDeviceThread, NULL);
 
+    ConfigDevice();
 
-    //pthread_join
 
-    //sleep(1000);
-
-    //exit(1);
-
-    //while(PingDevice())
-   // {
-     //   std::cout << "Неудачное подключение к тепловизору. Пробуем снова" << std::endl;
-        
-    //}
 
     // СЕТЕВЫЕ УСТАНОВКИ
     int bytes_send;         // количество отправленных клиенту байт
@@ -105,10 +103,14 @@ int main()
     {
         std::array<uint8_t, 327680> response_temp_data = {0}; // массив для всех пикселей
 
-        //reinitial();
+        int vsp_res = 999;
+        envir_param get_envir_data;
 
         SENDPARAM OutputStructData = {0};
-        GETPARAM InputStructData = {0};
+        GETTEMPLIM TempLimitStructData = {0};
+        GETDISTANCE DistanceStructData = {0};
+        GETAIRTEMP AirTempStructData = {0};
+        GETENVIRPARAMS EnvirParamStructData = {0};
 
         std::string TempPath = CapturePath;    // начало формируемого пути для файла (берется из config файла)
 
@@ -191,7 +193,7 @@ int main()
         // переменная от которой будет зависеть длина ответного пакета
         int32_t Answer_size = 0;
 
-        int Setparams_result; // результат установки параметров (в команде 3)
+        
 
         switch(Command)
         {
@@ -217,61 +219,80 @@ int main()
                     CaptureName.append(GetCurrentTimestamp(2));  // нижнего подчеркивания и текущего времени
 
                     TempPath.append(CaptureName);
-                    std::cout << "Итоговый путь сохранения снимка: " << TempPath << std::endl;
+                    std::cout << "Подготовленный путь сохранения снимка: " << TempPath << std::endl;
 
-                    // делаем jpeg и irg файл
-                    sdk_snapshot(pSdk, Device_Info, 1, (char *) TempPath.c_str());
 
-                    // далее извлекаем из irg файла данные
-                    TempPath.append(".irg");
-                    sdk_get_irg_data( (char *) TempPath.c_str(), 4, temp_data, image_data);
-
-                    CalcTmax = temp_data[0];
-                    CalcTmin = temp_data[0];
-                    CalcTavg = temp_data[0];
-                    
-                    for(int i=0; i < 327680; i++)
+                    // Создаем jpeg и irg файл. Эта функция выкинет segfault если вызвать ее при отключенном тепловизоре
+                    // При этом если не выполнена конфигурация, то все равно вернет УСПЕХ, не создав файлов. Просто говно-SDK
+                    if(!PingDevice()) // поэтому перед вызовом проверяем связь с устройством
                     {
-                        CalcTavg += temp_data[i];
+                        sdk_snapshot(pSdk, Device_Info, 1, (char *) TempPath.c_str());
 
-                        if(CalcTmax < temp_data[i])
-
+                        // далее извлекаем из irg файла данные. По наличию jpeg и irg файлов ориентируемся на эту функцию, так как sdk_snapshot() ни о чем
+                        TempPath.append(".irg");
+                        vsp_res = sdk_get_irg_data( (char *) TempPath.c_str(), 4, temp_data, image_data);
+                        if(vsp_res == -1)
                         {
-                            CalcTmax = temp_data[i];
+                            std::cout << "Не получилось создать файлы: jpeg и irg. Скорее всего не выполнена конфигурация" << std::endl;
+                            OutputStructData.error = 0x04;
                         }
-
-                        if(CalcTmin > temp_data[i])
+                        else
                         {
-                            CalcTmin = temp_data[i];
-                        } 
-                    }
+                            std::cout << "Создание файлов: jpeg и irg - ОК. Вытаскиваем данные..." << std::endl;
 
-                    CalcTavg /= 327680;
-                    CalcTavg = (CalcTavg)/10-273.2;
-                    CalcTmax = (CalcTmax)/10-273.2;
-                    CalcTmin = (CalcTmin)/10-273.2;
-
-                    std::cout << "\tСнимок сделан, данные считаны" << std::endl;
-                    std::cout << "\tCalcTavg=" << CalcTavg<< std::endl;
-                    std::cout << "\tCalcTmin=" << CalcTmin << std::endl;
-                    std::cout << "\tCalcTmax=" << CalcTmax << std::endl;
-
-                    OutputStructData.average_t = CalcTavg;
-                    OutputStructData.min_t = CalcTmin;
-                    OutputStructData.max_t = CalcTmax;
-                    
-                    if(TminmaxFlag == 1)
-                    {
-                        if((CalcTmax >= SettedTmax) && (CalcTmin <= SettedTmin))
+                            CalcTmax = temp_data[0];
+                            CalcTmin = temp_data[0];
+                            CalcTavg = temp_data[0];
+                            
+                            for(int i=0; i < 327680; i++)
                             {
-                                OutputStructData.signal = 0x01;
-                                std::cout << "\tЗафиксировано превышение допустимой температуры. Формируем сигнал" << std::endl;
+                                CalcTavg += temp_data[i];
+
+                                if(CalcTmax < temp_data[i])
+
+                                {
+                                    CalcTmax = temp_data[i];
+                                }
+
+                                if(CalcTmin > temp_data[i])
+                                {
+                                    CalcTmin = temp_data[i];
+                                } 
                             }
+
+                            CalcTavg /= 327680;
+                            CalcTavg = (CalcTavg)/10-273.2;
+                            CalcTmax = (CalcTmax)/10-273.2;
+                            CalcTmin = (CalcTmin)/10-273.2;
+
+                            std::cout << "\tДанные получены:" << std::endl;
+                            std::cout << "\tCalcTavg=" << CalcTavg<< std::endl;
+                            std::cout << "\tCalcTmin=" << CalcTmin << std::endl;
+                            std::cout << "\tCalcTmax=" << CalcTmax << std::endl;
+
+                            OutputStructData.average_t = CalcTavg;
+                            OutputStructData.min_t = CalcTmin;
+                            OutputStructData.max_t = CalcTmax;
+
+                            if(TminmaxFlag == 1)
+                            {
+                                if((CalcTmax >= SettedTmax) && (CalcTmin <= SettedTmin))
+                                    {
+                                        OutputStructData.signal = 0x01;
+                                        std::cout << "\tЗафиксировано превышение допустимой температуры. Формируем сигнал" << std::endl;
+                                    }
+                            }
+                            else
+                            {
+                                OutputStructData.error = 0x01;
+                                std::cout << "\tОбратно отправлять будем с ошибкой, так как не выставлены температурные пороги" << std::endl;
+                            }
+                        }
                     }
                     else
                     {
-                        OutputStructData.error = 0x01;
-                        std::cout << "\tОбратно отправлять будем с ошибкой, так как не выставлены температурные пороги" << std::endl;
+                        OutputStructData.error = 0x05;
+                        std::cout << "\tОбратно отправлять будем с ошибкой: нет связи с устройством" << std::endl;
                     }
                 }
 
@@ -282,79 +303,129 @@ int main()
 
             case 2: // ЗАПРОС ТЕМПЕРАТУР
                 std::cout << "Принята команда на запрос температур" << std::endl;
-
-                sdk_get_temp_data(pSdk, Device_Info, 256, area_temp);
-
-                Frame_Tavg = area_temp.iTempAvg/10;
-                Frame_Tmax = area_temp.iTempMax/10;
-                Frame_Tmin = area_temp.iTempMin/10;
-
-                OutputStructData.average_t = Frame_Tavg;
-                OutputStructData.min_t = Frame_Tmin;
-                OutputStructData.max_t = Frame_Tmax;
-                
-                std::cout << "TempAvg: " << Frame_Tavg << std::endl;  
-                std::cout << "TempMin: " <<  Frame_Tmin << std::endl;             
-                std::cout << "TempMax: " << Frame_Tmax << std::endl;
-
-                if(TminmaxFlag == 1)
+                // эта функция подвисает программу. Segfault не дает.
+                if(!PingDevice())
                 {
-                    if((Frame_Tmax >= SettedTmax) && (Frame_Tmin <= SettedTmin))
+                    vsp_res = sdk_get_temp_data(pSdk, Device_Info, 256, area_temp);
+
+                    Frame_Tavg = area_temp.iTempAvg/10;
+                    Frame_Tmax = area_temp.iTempMax/10;
+                    Frame_Tmin = area_temp.iTempMin/10;
+
+                    OutputStructData.average_t = Frame_Tavg;
+                    OutputStructData.min_t = Frame_Tmin;
+                    OutputStructData.max_t = Frame_Tmax;
+                    
+                    std::cout << "TempAvg: " << Frame_Tavg << std::endl;  
+                    std::cout << "TempMin: " <<  Frame_Tmin << std::endl;             
+                    std::cout << "TempMax: " << Frame_Tmax << std::endl;
+
+                    if(TminmaxFlag == 1)
                     {
-                        OutputStructData.signal = 0x01;
-                        std::cout << "\tЗафиксировано превышение допустимой температуры. Формируем сигнал" << std::endl;
+                        if((Frame_Tmax >= SettedTmax) && (Frame_Tmin <= SettedTmin))
+                        {
+                            OutputStructData.signal = 0x01;
+                            std::cout << "\tЗафиксировано превышение допустимой температуры. Формируем сигнал" << std::endl;
+                        }
+                            
                     }
-                        
+                    else
+                    {
+                        OutputStructData.error = 0x01;
+                        std::cout << "\tОбратно отправлять будем с ошибкой, так как не выставлены температурные пороги" << std::endl;
+                    } 
                 }
                 else
                 {
-                    OutputStructData.error = 0x01;
-                    std::cout << "\tОбратно отправлять будем с ошибкой, так как не выставлены температурные пороги" << std::endl;
+                    std::cout << "Нет связи с тепловизором, возвращаем ошибку" << std::endl;
+                    OutputStructData.error = 0x05;
                 }
+
                 Answer_size = 14;
                 break;
 
-
-            case 3: // УСТАНОВКА ПАРАМЕТРОВ ОКРУЖАЮЩЕЙ СРЕДЫ И НУЖНЫХ НАМ ТЕМПЕРАТУРНЫХ ПОРОГОВ
-                std::cout << "Пришла команда на установку параметров" << std::endl;
-
-                if((bytes_recv) == sizeof(GETPARAM))
+            case 0x31:
+                std::cout << "Пришла команда на установку температуры окружающей среды" << std::endl;
+                if((bytes_recv) == sizeof(GETAIRTEMP))
                 {
-                    memcpy(&InputStructData, Receive_Buff, sizeof(InputStructData));
+                    memcpy(&AirTempStructData, Receive_Buff, sizeof(AirTempStructData));
+                    std::cout << "\tAirTemp: " << (int) AirTempStructData.around_temp << std::endl;
+                    std::cout << "\tУстанавливаем эти значения..." << std::endl;
+                    // здесь надо вписывать в файл, после чего сделать реинициализацию SDK и переподключение к устройству, чтобы считать новые параметры из файла
+                    RewriteFileContent(1, std::to_string(AirTempStructData.around_temp));
+                    OutputStructData.error = 0x00;
                 }
-                
-                //std::cout << "command: " << InputStructData.cmd << std::endl;
-                std::cout << "\tAroundTemp: " << InputStructData.around_temp << std::endl;
-                std::cout << "\tDistance: " << InputStructData.distance << std::endl;
-                std::cout << "\tMin_t: " << InputStructData.min_t << std::endl;
-                std::cout << "\tMax_t: " << InputStructData.max_t << std::endl << std::endl;
-
-                std::cout << "\tУстанавливаем эти значения..." << std::endl;
-
-                SettedTmin = InputStructData.min_t; // наш температурный порог
-                SettedTmax = InputStructData.max_t; // наш температурный порог
-
-                // физические параметры окружающей среды
-                envir_data.airTemp = InputStructData.around_temp * 10000;
-                envir_data.reflectTemp = envir_data.airTemp;
-                envir_data.distance = InputStructData.distance * 10000;
-                //envir_data.humidity = ;       // установку влажности добавить когда потребуется
-                //envir_data.emissivity = ;     // установку излучаемости добавить когда потребуется
-
-                Setparams_result = sdk_set_envir_param(pSdk, Device_Info, envir_data); // функция для установки подготовленных параметров окружающей среды
-                if(Setparams_result != -1)
+                else
                 {
-                    std::cout << "\tЗначения установлены: " << Setparams_result <<  std::endl;
-                    TminmaxFlag=1; // поднимаем флаг о том что значения установлены
+                    std::cout << "\tНеверный размер структуры. Ответим ошибкой" << std::endl; 
+                    OutputStructData.error = 0x06;
+                }
+                ReinitialAndConnect();
+                ConfigDevice();
+                break;
+
+            case 0x32:
+                std::cout << "Пришла команда на установку дистанции" << std::endl;
+                if((bytes_recv) == sizeof(GETDISTANCE))
+                {
+                    memcpy(&DistanceStructData, Receive_Buff, sizeof(DistanceStructData));
+                    std::cout << "\tDistance: " << (int) DistanceStructData.distance << std::endl;
+
+                    RewriteFileContent(2, std::to_string(DistanceStructData.distance));
+                }
+                else
+                {
+                    std::cout << "\tНеверный размер структуры. Ответим ошибкой" << std::endl; 
+                    OutputStructData.error = 0x06;
+                }
+                ReinitialAndConnect();
+                ConfigDevice();
+                break;
+
+            case 0x33:
+                std::cout << "Пришла команда на установку излучаемости и влажности" << std::endl;
+                if((bytes_recv) == sizeof(GETENVIRPARAMS))
+                {
+                    memcpy(&EnvirParamStructData, Receive_Buff, sizeof(EnvirParamStructData));
+                    std::cout << "\tEmissivity: " << (float) EnvirParamStructData.emissivity << std::endl;
+                    std::cout << "\tHumidity: " << (float) EnvirParamStructData.humidity << std::endl;
+
+                    RewriteFileContent(3, std::to_string(EnvirParamStructData.emissivity));
+                    RewriteFileContent(4, std::to_string(EnvirParamStructData.humidity));
+                }
+                else
+                {
+                    std::cout << "\tНеверный размер структуры. Ответим ошибкой" << std::endl; 
+                    OutputStructData.error = 0x06;
+                }
+                ReinitialAndConnect();
+                ConfigDevice();
+                break;
+
+
+            case 0x06: // УСТАНОВКА ПАРАМЕТРОВ ОКРУЖАЮЩЕЙ СРЕДЫ И НУЖНЫХ НАМ ТЕМПЕРАТУРНЫХ ПОРОГОВ
+                std::cout << "Пришла команда на установку температурных порогов" << std::endl;
+                if((bytes_recv) == sizeof(GETTEMPLIM))
+                {
+                    memcpy(&TempLimitStructData, Receive_Buff, sizeof(TempLimitStructData));
+
+                    //std::cout << "command: " << TempLimitStructData.cmd << std::endl;
+                    std::cout << "\tMin_t: " << TempLimitStructData.min_t << std::endl;
+                    std::cout << "\tMax_t: " << TempLimitStructData.max_t << std::endl << std::endl;
+
+                    std::cout << "\tУстанавливаем эти пороги..." << std::endl;                
+
+                    SettedTmin = TempLimitStructData.min_t; // наш температурный порог
+                    SettedTmax = TempLimitStructData.max_t; // наш температурный порог
+                    TminmaxFlag=1;                          // поднимаем флаг о том что значения установлены
+
                     OutputStructData.error = 0x00; // флаг для ответа что все хорошо
                 }
                 else
                 {
-                    std::cout << "\tНЕУДАЧА. Требуется реинициализация SDK (возможно камера отключалась)" << std::endl;
-                    
-                    OutputStructData.error = 0x03; // ошибка связи с тепловизором
+                    std::cout << "\tНеверный размер структуры. Ответим ошибкой" << std::endl; 
+                    OutputStructData.error = 0x06;
                 }
-                
                 Answer_size = 4;
                 break;
 
@@ -460,9 +531,19 @@ int main()
                 ReinitialAndConnect();
                 break;
 
+            case 0x92: // чтение текущих параметров окружающей среды
+                std::cout << "Чтение...\n" << std::endl;   
+                sdk_get_envir_param(pSdk, Device_Info, &get_envir_data);
+                std::cout << "Default airTemp: " << get_envir_data.airTemp << std::endl;
+                std::cout << "Default emissivity: " << get_envir_data.emissivity << std::endl;
+                std::cout << "Default reflectTemp: " << get_envir_data.reflectTemp << std::endl;
+                std::cout << "Default humidity: " << get_envir_data.humidity << std::endl;
+                std::cout << "Default distance: " << get_envir_data.distance << std::endl;
+                break;
 
+            case 0x93: 
 
-            
+                break;
 
             default: 
                 std::cout << "неизвестный тип запроса" << std::endl;
