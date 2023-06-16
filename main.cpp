@@ -20,6 +20,12 @@ std::string Distance;
 
 #define NETPORT 30001             // порт на который сядет эта программа
 
+bool SDK_INIT = false;
+
+int32_t SettedTmax = 0;         // максимальный порог температуры для срабатывания сигнала
+int32_t SettedTmin = 0;         // минимальный порог температуры для срабатывания сигнала
+bool TminmaxFlag = false;       // флаг установки порога минимальной и максимальной температуры
+
 
 IRNETHANDLE pSdk;                 // дескриптор для работы с SDK
 struct ChannelInfo Device_Info;   // структура с информацией о подключении к устройству, заполняется автоматически чтением config-файла
@@ -41,33 +47,28 @@ int main()
     int32_t SettedHumidity = 0;     // влажность
 
     // Устанавливаемые программные параметры для взаимодействия с ПО Вектор
-    int32_t SettedTmax = 0;         // максимальный порог температуры для срабатывания сигнала
-    int32_t SettedTmin = 0;         // минимальный порог температуры для срабатывания сигнала
-    bool TminmaxFlag = false;       // флаг установки порога минимальной и максимальной температуры
+
+    
 
     int32_t PixCoordX = 0;          // переменная для хранения координаты X пикселя
     int32_t PixCoordY = 0;          // переменная для хранения координаты Y пикселя
     
-    unsigned short temp_data[640*512] = { 0 };      // буфер для хранения температурной матрицы
+    unsigned short temp_data[640*512] = { 0 };     // !!! могут быть минусовые, поправить тип. буфер для хранения температурной матрицы 
     unsigned char image_data[1000*1000] = { 0 };    // буфер для хранения RGB-данных снимка. С размером буфера не разобрался
 
     std::cout << "Version: " << version << std::endl;
     std::cout << "Это драйвер для тепловизора AT61F (производства Infiray)." << std::endl;
     
     
-    InitialSDK(); // Инициализация SDK
- 
-    while(DeviceConnect()) // <---- ПОСЛЕ ИНИЦИАЛИЗАЦИЯ НАДО ПОПЫТКИ НАЛАДИТЬ СВЯЗЬ
-    {
-        sleep(5);
-    }
     
-
+    
+    
     pthread_t thread;
     int result_thread;
     result_thread = pthread_create(&thread, NULL, &PingDeviceThread, NULL);
 
-    ConfigDevice();
+    
+
 
 
 
@@ -101,6 +102,8 @@ int main()
 
     while(true)
     {
+
+
         std::array<uint8_t, 327680> response_temp_data = {0}; // массив для всех пикселей
 
         int vsp_res = 999;
@@ -112,7 +115,7 @@ int main()
         GETAIRTEMP AirTempStructData = {0};
         GETENVIRPARAMS EnvirParamStructData = {0};
 
-        std::string TempPath = CapturePath;    // начало формируемого пути для файла (берется из config файла)
+        std::string TempPath;// начало формируемого пути для файла (берется из config файла)
 
         // СОЗДАНИЕ ИМЕНИ СНИМКОВ И ПОДКАТАЛОГОВ ДЛЯ ИХ МЕСТОПОЛОЖЕНИЯ
         std::string CaptureName = "";          // сюда будет класться имя снимка
@@ -197,7 +200,7 @@ int main()
 
         switch(Command)
         {
-            case 1: // СДЕЛАТЬ СНИМОК
+            case 0x01: // СДЕЛАТЬ СНИМОК
                 // сначала формируем имя снимка
                 CaptureName = RestRequestText;
                 if((CaptureName.length() < 3) || (CaptureName.length() > 39))
@@ -208,6 +211,7 @@ int main()
                 else
                 {
                     std::cout << "Принята команда на формирование снимка. Имя для него берем из запроса: " << CaptureName << std::endl;
+                    TempPath = CapturePath;    // начало формируемого пути для файла (берется из config файла)
 
                     mkdir(TempPath.c_str(), 0777);          // создаем основной каталог если он отсутствует
                     TodayDirName = GetCurrentTimestamp(0);  // готовимся к созданию подкаталога с именем-датой (сегодняшней)
@@ -222,10 +226,11 @@ int main()
                     std::cout << "Подготовленный путь сохранения снимка: " << TempPath << std::endl;
 
 
-                    // Создаем jpeg и irg файл. Эта функция выкинет segfault если вызвать ее при отключенном тепловизоре
-                    // При этом если не выполнена конфигурация, то все равно вернет УСПЕХ, не создав файлов. Просто говно-SDK
+                    
                     if(!PingDevice()) // поэтому перед вызовом проверяем связь с устройством
                     {
+                        // Создаем jpeg и irg файл. Эта функция выкинет segfault если вызвать ее при отключенном тепловизоре
+                        // При этом если не выполнена конфигурация, то все равно вернет УСПЕХ, не создав файлов. Просто говно-SDK
                         sdk_snapshot(pSdk, Device_Info, 1, (char *) TempPath.c_str());
 
                         // далее извлекаем из irg файла данные. По наличию jpeg и irg файлов ориентируемся на эту функцию, так как sdk_snapshot() ни о чем
@@ -274,9 +279,9 @@ int main()
                             OutputStructData.min_t = CalcTmin;
                             OutputStructData.max_t = CalcTmax;
 
-                            if(TminmaxFlag == 1)
+                            if(TminmaxFlag == true)
                             {
-                                if((CalcTmax >= SettedTmax) && (CalcTmin <= SettedTmin))
+                                if((CalcTmax >= SettedTmax) || (CalcTmin <= SettedTmin))
                                     {
                                         OutputStructData.signal = 0x01;
                                         std::cout << "\tЗафиксировано превышение допустимой температуры. Формируем сигнал" << std::endl;
@@ -301,7 +306,7 @@ int main()
                 break;   
 
 
-            case 2: // ЗАПРОС ТЕМПЕРАТУР
+            case 0x02: // ЗАПРОС ТЕМПЕРАТУР
                 std::cout << "Принята команда на запрос температур" << std::endl;
                 // эта функция подвисает программу. Segfault не дает.
                 if(!PingDevice())
@@ -322,7 +327,7 @@ int main()
 
                     if(TminmaxFlag == 1)
                     {
-                        if((Frame_Tmax >= SettedTmax) && (Frame_Tmin <= SettedTmin))
+                        if((Frame_Tmax >= SettedTmax) || (Frame_Tmin <= SettedTmin))
                         {
                             OutputStructData.signal = 0x01;
                             std::cout << "\tЗафиксировано превышение допустимой температуры. Формируем сигнал" << std::endl;
@@ -344,7 +349,7 @@ int main()
                 Answer_size = 14;
                 break;
 
-            case 0x31:
+            case 31:
                 std::cout << "Пришла команда на установку температуры окружающей среды" << std::endl;
                 if((bytes_recv) == sizeof(GETAIRTEMP))
                 {
@@ -360,11 +365,12 @@ int main()
                     std::cout << "\tНеверный размер структуры. Ответим ошибкой" << std::endl; 
                     OutputStructData.error = 0x06;
                 }
+                Answer_size = 4;
                 ReinitialAndConnect();
                 ConfigDevice();
                 break;
 
-            case 0x32:
+            case 32:
                 std::cout << "Пришла команда на установку дистанции" << std::endl;
                 if((bytes_recv) == sizeof(GETDISTANCE))
                 {
@@ -378,11 +384,12 @@ int main()
                     std::cout << "\tНеверный размер структуры. Ответим ошибкой" << std::endl; 
                     OutputStructData.error = 0x06;
                 }
+                Answer_size = 4;
                 ReinitialAndConnect();
                 ConfigDevice();
                 break;
 
-            case 0x33:
+            case 33:
                 std::cout << "Пришла команда на установку излучаемости и влажности" << std::endl;
                 if((bytes_recv) == sizeof(GETENVIRPARAMS))
                 {
@@ -398,12 +405,13 @@ int main()
                     std::cout << "\tНеверный размер структуры. Ответим ошибкой" << std::endl; 
                     OutputStructData.error = 0x06;
                 }
+                Answer_size = 4;
                 ReinitialAndConnect();
                 ConfigDevice();
                 break;
 
 
-            case 0x06: // УСТАНОВКА ПАРАМЕТРОВ ОКРУЖАЮЩЕЙ СРЕДЫ И НУЖНЫХ НАМ ТЕМПЕРАТУРНЫХ ПОРОГОВ
+            case 6: // УСТАНОВКА ПАРАМЕТРОВ ОКРУЖАЮЩЕЙ СРЕДЫ И НУЖНЫХ НАМ ТЕМПЕРАТУРНЫХ ПОРОГОВ
                 std::cout << "Пришла команда на установку температурных порогов" << std::endl;
                 if((bytes_recv) == sizeof(GETTEMPLIM))
                 {
@@ -413,11 +421,12 @@ int main()
                     std::cout << "\tMin_t: " << TempLimitStructData.min_t << std::endl;
                     std::cout << "\tMax_t: " << TempLimitStructData.max_t << std::endl << std::endl;
 
-                    std::cout << "\tУстанавливаем эти пороги..." << std::endl;                
+                    std::cout << "\tУстанавливаем эти пороги..." << std::endl;    
 
-                    SettedTmin = TempLimitStructData.min_t; // наш температурный порог
-                    SettedTmax = TempLimitStructData.max_t; // наш температурный порог
-                    TminmaxFlag=1;                          // поднимаем флаг о том что значения установлены
+                    // из
+                    RewriteFileContent(5, std::to_string(TempLimitStructData.min_t));
+                    RewriteFileContent(6, std::to_string(TempLimitStructData.max_t));
+
 
                     OutputStructData.error = 0x00; // флаг для ответа что все хорошо
                 }
@@ -427,13 +436,20 @@ int main()
                     OutputStructData.error = 0x06;
                 }
                 Answer_size = 4;
+                ReinitialAndConnect();
+                ConfigDevice();
                 break;
 
 
-            case 4:
+            case 0x04:
                 std::cout << "Пришла команда на чтение температуры пикселя" << std::endl;
+
+                TempPath = CapturePath;    // начало формируемого пути для файла (берется из config файла)
+
                 CaptureName="temp_pixel";
                 std::cout << "Принята команда на чтение температуры пикселя. Сначала делаем снимок, имя для него берем временное: " << CaptureName << std::endl;
+
+                
 
                 mkdir(TempPath.c_str(), 0777);          // создаем основной каталог если он отсутствует
                 TodayDirName = GetCurrentTimestamp(0);  // готовимся к созданию подкаталога с именем-датой (сегодняшней)
@@ -444,43 +460,53 @@ int main()
                 TempPath.append(CaptureName);
                 std::cout << "Итоговый путь сохранения снимка: " << TempPath << std::endl;
 
-                // делаем jpeg и irg файл
-                sdk_snapshot(pSdk, Device_Info, 1, (char *) TempPath.c_str());
-
-                // далее извлекаем из irg файла данные
-                TempPath.append(".irg");
-                sdk_get_irg_data( (char *) TempPath.c_str(), 4, temp_data, image_data);
-
-                CalcTpix = temp_data[0];
-
-                std::memcpy(&PixCoordX, &Receive_Buff[1], sizeof(uint32_t));
-                std::memcpy(&PixCoordY, &Receive_Buff[5], sizeof(uint32_t));
-
-                std::cout << "\tКоордината x=" << PixCoordX << std::endl;
-                std::cout << "\tКоордината y=" << PixCoordY << std::endl;
-
-                NumPixel = (PixCoordY * 640) + PixCoordX;
-
-                CalcTpix = temp_data[NumPixel];
-
-                CalcTpix = (CalcTpix)/10-273.2; // посчитанное значение температуры пикселя
-
-
-                std::cout << "\tCalcTpix=" << CalcTpix << std::endl;
-                OutputStructData.average_t = CalcTpix;
-
-                if((PixCoordX > 640) || (PixCoordY > 512))
+                if(!PingDevice()) // поэтому перед вызовом проверяем связь с устройством
                 {
-                    OutputStructData.error = 0x01;
+
+                    // делаем jpeg и irg файл
+                    sdk_snapshot(pSdk, Device_Info, 1, (char *) TempPath.c_str());
+
+                    // далее извлекаем из irg файла данные
+                    TempPath.append(".irg");
+                    sdk_get_irg_data( (char *) TempPath.c_str(), 4, temp_data, image_data);
+
+                    CalcTpix = temp_data[0];
+
+                    std::memcpy(&PixCoordX, &Receive_Buff[1], sizeof(uint32_t));
+                    std::memcpy(&PixCoordY, &Receive_Buff[5], sizeof(uint32_t));
+
+                    std::cout << "\tКоордината x=" << PixCoordX << std::endl;
+                    std::cout << "\tКоордината y=" << PixCoordY << std::endl;
+
+                    NumPixel = (PixCoordY * 640) + PixCoordX;
+
+                    CalcTpix = temp_data[NumPixel];
+
+                    CalcTpix = (CalcTpix)/10-273.2; // посчитанное значение температуры пикселя
+
+
+                    std::cout << "\tCalcTpix=" << CalcTpix << std::endl;
+                    OutputStructData.average_t = CalcTpix;
+
+                    if((PixCoordX > 640) || (PixCoordY > 512))
+                    {
+                        OutputStructData.error = 0x01;
+                    }
                 }
-               
+                else
+                {
+                        OutputStructData.error = 0x05;
+                        std::cout << "\tОбратно отправлять будем с ошибкой: нет связи с устройством" << std::endl;
+                }
                 remove(TempPath.c_str());
                 Answer_size=5;
                 break;
 
-            case 5: // запрос карты пикселей
+            case 0x05: // запрос карты пикселей
                 std::cout << "Пришла команда на массив всех пикселей" << std::endl;
-                
+
+                TempPath = CapturePath;    // начало формируемого пути для файла (берется из config файла)
+
                 CaptureName="temp_pixel";
                 std::cout << "Принята команда на чтение температуры пикселя. Сначала делаем снимок, имя для него берем временное: " << CaptureName << std::endl;
 
@@ -492,26 +518,35 @@ int main()
 
                 TempPath.append(CaptureName);
                 std::cout << "Итоговый путь сохранения снимка: " << TempPath << std::endl;
-
-                // делаем jpeg и irg файл
-                sdk_snapshot(pSdk, Device_Info, 1, (char *) TempPath.c_str());
-
-                // далее извлекаем из irg файла данные
-                TempPath.append(".irg");
-                sdk_get_irg_data( (char *) TempPath.c_str(), 4, temp_data, image_data);
                 
-                for(int i=0; i < 327680; i++)
+                if(!PingDevice()) // поэтому перед вызовом проверяем связь с устройством
                 {
-                    response_temp_data[i] = temp_data[i]/10 - 273.2;
+                    // делаем jpeg и irg файл
+                    sdk_snapshot(pSdk, Device_Info, 1, (char *) TempPath.c_str());
+
+                    // далее извлекаем из irg файла данные
+                    TempPath.append(".irg");
+                    sdk_get_irg_data( (char *) TempPath.c_str(), 4, temp_data, image_data);
+                    
+                    for(int i=0; i < 327680; i++)
+                    {
+                        response_temp_data[i] = temp_data[i]/10 - 273.2;
+                    }
+
+
+                    std::cout << "\tМассив подготовлен" << std::endl;
+                    Answer_size=327680;
                 }
-
-
-                std::cout << "\tМассив подготовлен" << std::endl;
-
+                else
+                {
+                        response_temp_data[0] = 0x05;
+                        std::cout << "\tОбратно отправлять будем с ошибкой: нет связи с устройством" << std::endl;
+                        Answer_size=4;                  
+                }
                
                 remove(TempPath.c_str());
                 
-                Answer_size=327680;
+                
                 break;    
 
                 
@@ -525,6 +560,19 @@ int main()
                 ConfigDevice();
                 break;
 
+            case 0xF4:
+                if(!PingDevice()) // поэтому перед вызовом проверяем связь с устройством
+                {
+                    OutputStructData.error = 0x55;
+                    Answer_size = 1;
+                }
+                else
+                {
+                    OutputStructData.error = 0x65;
+                    Answer_size = 1;
+                }
+                break;
+
 
             case 0x91: // принудительная реинициализация
                 std::cout << "Принудительная реинициализация...\n" << std::endl;   
@@ -534,16 +582,23 @@ int main()
             case 0x92: // чтение текущих параметров окружающей среды
                 std::cout << "Чтение...\n" << std::endl;   
                 sdk_get_envir_param(pSdk, Device_Info, &get_envir_data);
-                std::cout << "Default airTemp: " << get_envir_data.airTemp << std::endl;
-                std::cout << "Default emissivity: " << get_envir_data.emissivity << std::endl;
-                std::cout << "Default reflectTemp: " << get_envir_data.reflectTemp << std::endl;
-                std::cout << "Default humidity: " << get_envir_data.humidity << std::endl;
-                std::cout << "Default distance: " << get_envir_data.distance << std::endl;
+                std::cout << "Current physical paramerers:" << std::endl; 
+                std::cout << "\tairTemp: " << get_envir_data.airTemp << std::endl;
+                std::cout << "\temissivity: " << get_envir_data.emissivity << std::endl;
+                std::cout << "\treflectTemp: " << get_envir_data.reflectTemp << std::endl;
+                std::cout << "\thumidity: " << get_envir_data.humidity << std::endl;
+                std::cout << "\tdistance: " << get_envir_data.distance << std::endl;
+
+                std::cout << std::endl;
+                std::cout << "Current temperature limits:" << std::endl; 
+                std::cout << "\tTmin: " << SettedTmin << std::endl;
+                std::cout << "\tTmax: " << SettedTmax << std::endl;
+
+
+
                 break;
 
-            case 0x93: 
 
-                break;
 
             default: 
                 std::cout << "неизвестный тип запроса" << std::endl;

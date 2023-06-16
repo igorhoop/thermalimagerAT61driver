@@ -1,0 +1,68 @@
+ПЕРЕЧЕНЬ ОШИБОК:
+00 - ошибок нет
+01 - не выставлены температурные пороги
+02 - неверная длина имени снимка
+03 - ошибка при установке параметров окружающей среды
+04 - ошибка при создании файлов jpeg,irg
+05 - нет связи с тепловизором
+06 - неверный размер принятой структуры
+
+
+ПРОТОКОЛ:
+
+1) Создать снимок
+    Q:     01       XX XX XX XX XX XX .... XX
+        |command|    |имя снимка 3-39 байт|
+
+    A:     00      XX XX XX XX  XX XX XX XX  XX XX XX XX 
+        |error|    |сред.темп|   |мин.темп|  |макс.темп|
+
+2) Запрос температур
+    Q:     02        XX XX XX
+        |command|    |reserv|
+    
+    A:    00       XX XX XX XX   XX XX XX XX   XX XX XX XX     00      #сигнал 00: нет превышения
+        |error|    |сред.темп|   |мин.темп|    |макс.темп|  |signal|   #       01: есть превышение
+
+3) Команда на установку температуры окружающей среды
+    Q:     31           XX
+        |command|    |AirTemp|
+
+    A:    00       XX XX XX  
+        |error|    |reserv|
+
+4) Команда на установку дистанции
+    Q:     32            XX
+        |command|    |Distance|
+
+    A:    00       XX XX XX  
+        |error|    |reserv|
+
+5) Команда на установку излучаемости и влажности
+    Q:     33       XX XX XX XX    XX XX XX XX       # тип значений - float
+        |command|   |Emissivity|    |Humidity|
+
+    A:     00       XX XX XX  
+        |error|     |reserv|
+
+6) Запрос температуры пикселя
+    Q:     04       XX XX XX XX    XX XX XX XX
+        |command|   |coord. X|      |coord.Y|
+
+    A:    00        XX XX XX XX  
+        |error|    |pixel temp.|
+
+7) Запрос температурной карты пикселей
+    Q:     05       XX XX XX
+        |command|   |reserv| 
+
+    A:  XX XX XX XX .. XX  
+        |карта, 327680 байт|
+
+8) Установка температурных порогов
+    Q:     06       XX XX XX XX     XX XX XX XX
+        |command|   |min.temp|      |max.temp|
+
+    A:    00        XX XX XX XX  
+        |error|      |reserv|
+

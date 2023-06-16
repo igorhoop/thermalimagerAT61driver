@@ -17,6 +17,12 @@ extern std::string Emissivity;
 extern std::string Humidity;
 extern std::string Distance;
 
+extern bool SDK_INIT;
+
+
+extern int32_t SettedTmin;  
+extern int32_t SettedTmax;  
+extern bool TminmaxFlag;
 
 
 
@@ -50,6 +56,18 @@ uint8_t CheckHTTPRequest(std::string request)
 void * PingDeviceThread(void * args)
 {
     int vsp = 0;
+    while(SDK_INIT==false) // первичная инициализация
+    {
+        InitialSDK(); // Инициализация SDK
+
+        while(DeviceConnect()) 
+        {
+            sleep(5);
+        }
+        ConfigDevice();
+        SDK_INIT=true;
+    }
+
     Area_Temp local_area_temp;
     while(1)
     {
@@ -89,12 +107,12 @@ int PingDevice()
     float DeviceTemp;
     if(sdk_get_camera_temp(pSdk, &DeviceTemp)==0)
     {
-        //std::cout << "\tпинг есть" << std::endl;
+        std::cout << "\tпинг есть" << std::endl;
         return 0;
     }
     else
     {
-        //std::cout << "\tпинга нет" << std::endl;
+        std::cout << "\tпинга нет" << std::endl;
         return 1;
     }
 }
@@ -136,9 +154,10 @@ void ConfigDevice()
             v: Формат снимка нужно нужно перезадать, иначе jpeg и irg файлы создаваться не будут,
                 при этом из SDK будут выдаваться последние данные считанные из irg 
             v: Цветовую палитру нужно перезадать: но выдержать перед этим паузу?
-            v: Единицы измерения (цельсии)
-
-        параметры окружающей среды хранятся в устройстве?
+            
+            v: Параметры окружающей среды
+        
+            Единицы измерения (цельсии) ??? под вопросом
     */
     std::cout << "Конфигурирование устройства..." << std::endl;
     // установка формата снимков, будет создаваться оба файла: jpg и irg. ДОЛЖЕН БЫТЬ ВКЛЮЧЕН ТЕПЛОВИЗОР, иначе подвиснет
@@ -160,12 +179,18 @@ void ConfigDevice()
     //}
     //std::cout << "\tУстановка единиц измерения: ОК" << std::endl;
 
+    Time_Param timeData;
+    time_t now_time=time(NULL);
+    tm*  t_tm = localtime(&now_time);
+    timeData.m_year = t_tm->tm_year+1900;
+    timeData.m_month = t_tm->tm_mon + 1;
+    timeData.m_dayofmonth = t_tm->tm_mday;
+    timeData.m_hour = t_tm->tm_hour;
+    timeData.m_minute = t_tm->tm_min;
+    timeData.m_second = t_tm->tm_sec;
 
 
-//    std::cout << "\tУстановка формата снимков: " << res << std::endl;
-
-    /*
-    
+    sdk_synchronised_time(pSdk, Device_Info, timeData);
 
 
     // Установка отрисовки экранных измерений
@@ -186,21 +211,7 @@ void ConfigDevice()
     sdk_set_osd_display(pSdk, Device_Info, osdContent);
 
 
-
-    //envir_data.airTemp = 25 * 10000;
-    //envir_data.emissivity = 0.9 *10000;
-    //envir_data.reflectTemp = envir_data.airTemp;
-    //envir_data.humidity = 2 * 10000;
-    //envir_data.distance = 2 * 10000;
-    //sdk_set_envir_param(pSdk, Device_Info, envir_data); // функция для установки подготовленных параметров окружающей среды
-
-
-
-    
-*/
-
     SetEnvirParams();
-    
 
 }
 
@@ -316,6 +327,16 @@ void GetConfigForConnectCAM(std::string path)
     vsp2 = (int) config.find(";", vsp2+1);
     Distance = config.substr(vsp1+9, vsp2-vsp1-9);
 
+    vsp1 = (int) config.find("Tmin=");
+    vsp2 = (int) config.find(";", vsp2+1);
+    std::string tmin = config.substr(vsp1+5, vsp2-vsp1-5);
+
+    vsp1 = (int) config.find("Tmax=");
+    vsp2 = (int) config.find(";", vsp2+1);
+    std::string tmax = config.substr(vsp1+5, vsp2-vsp1-5);
+
+    
+
 
     std::cout << "Читаем данные подключения к камере..." << std::endl;
     std::cout << "\tIP: " << host << std::endl;
@@ -330,6 +351,9 @@ void GetConfigForConnectCAM(std::string path)
     std::cout << "\tHumidity: " << Humidity << std::endl;
     std::cout << "\tDistance: " << Distance << std::endl;
 
+    std::cout << "\tTmin: " << tmin << std::endl;
+    std::cout << "\tTmax: " << tmax << std::endl;
+
     std::cout << "\n\n\tПуть для сохранения снимков:" << CapturePath <<  std::endl;
 
     // заполнение данных для подключения
@@ -340,10 +364,19 @@ void GetConfigForConnectCAM(std::string path)
     Device_Info.wPortNum = atoi(port.c_str());
     Device_Info.channel = 0; // что за канал, одному богу известно
 
+    SetTempLimit(atoi(tmin.c_str()), atoi(tmax.c_str()));
 
 
 }
 
+int SetTempLimit(int32_t tmin, int32_t tmax)
+{
+    std::cout << "\tУстановка температурных порогов..." << std::endl;  
+    SettedTmin = tmin; // наш температурный порог
+    SettedTmax = tmax; // наш температурный порог
+    TminmaxFlag=true;                          // поднимаем флаг о том что значения установлены
+    return 0;
+}
 
 
 int SetEnvirParams()
@@ -406,6 +439,21 @@ int RewriteFileContent(int target, std::string value)
             content.erase(vsp1+9, vsp2-vsp1-9);
             content.insert(vsp1+9, value);
             break;
+
+        case 5:
+            vsp1 = (int) content.find("Tmin=");
+            vsp2 = (int) content.find(";", vsp1);
+            content.erase(vsp1+5, vsp2-vsp1-5);
+            content.insert(vsp1+5, value);
+            break;
+
+        case 6:
+            vsp1 = (int) content.find("Tmax=");
+            vsp2 = (int) content.find(";", vsp1);
+            content.erase(vsp1+5, vsp2-vsp1-5);
+            content.insert(vsp1+5, value);
+            break;
+
 
     }
 

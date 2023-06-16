@@ -12,6 +12,7 @@ int GetDeviceInfo();
 int WaitDevice();
 int SetEnvirParams();
 int RewriteFileContent(int target, std::string value);
+int SetTempLimit(int32_t tmin, int32_t tmax);
 
 // threads
 void * PingDeviceThread(void * args);
