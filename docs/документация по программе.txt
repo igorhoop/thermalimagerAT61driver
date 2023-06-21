@@ -66,3 +66,14 @@
     A:    00        XX XX XX XX  
         |error|      |reserv|
 
+
+
+
+
+* Значения по умолчанию для SDK (Environment):
+AirTemp = 250000
+Emissivity = 10000
+ReflectTemp = 250000
+Humidity = 10000
+Distance = 20000
+

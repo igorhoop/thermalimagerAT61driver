@@ -1,11 +1,15 @@
+# настройки подключения
 ip=192.168.1.156;
-port=3000;
+port=888;
 login=888888;
 pass=888888;
-CapturePath=../photos/;
 
 # параметры окружающей среды
-AirTemp=25;
+AirTemp=24;
 Emissivity=0.900000;
 Humidity=1.200000;
 Distance=5;
+
+# температурные пороги
+Tmin=10;
+Tmax=35;

@@ -2,7 +2,7 @@ void InitialSDK();
 int DeviceConnect();
 
 std::string GetContentFromFile(const std::string & filePath);
-void GetConfigForConnectCAM(std::string path);
+int GetConfigForConnectCAM(std::string path);
 std::string GetCurrentTimestamp(int format);
 uint8_t CheckHTTPRequest(std::string request);
 void ReinitialAndConnect();
@@ -11,8 +11,11 @@ int PingDevice();
 int GetDeviceInfo();
 int WaitDevice();
 int SetEnvirParams();
-int RewriteFileContent(int target, std::string value);
+int RewriteFileContent(std::string file_path, std::string option_name, std::string value);
 int SetTempLimit(int32_t tmin, int32_t tmax);
+
+// net
+int PortOpen();
 
 // threads
 void * PingDeviceThread(void * args);

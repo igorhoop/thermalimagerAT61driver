@@ -1,24 +1,26 @@
+/*
+    ПРЕДМЕТНЫЕ САМОПИСНЫЕ ФУНКЦИИ, КОТОРЫЕ ИСПОЛЬЗУЮТ SDK
+*/
+
 #include <fstream>
-#include "include/InfraredTempSDK.h"
-#include "headers/3l_functions.h"
-#include <ctime>
+#include "../include/InfraredTempSDK.h"
+#include "../headers/3l_functions.h"
 #include <cstdlib>
 #include <cstring>
 
 
+
+
 extern IRNETHANDLE pSdk;
 extern struct ChannelInfo Device_Info;
-extern std::string CapturePath;
 extern envir_param envir_data;
 
 extern std::string AirTemp;
 extern std::string Emissivity;
-//extern std::string ReflectTemp;
 extern std::string Humidity;
 extern std::string Distance;
 
 extern bool SDK_INIT;
-
 
 extern int32_t SettedTmin;  
 extern int32_t SettedTmax;  
@@ -27,30 +29,8 @@ extern bool TminmaxFlag;
 
 
 
-// =========== ПРОВЕРКА HTTP-ЗАПРОСОВ  ===========
-uint8_t CheckHTTPRequest(std::string request)
-{
-    std::string find_substring;     // для поиска подстрок
 
-    // проверка что пришел запрос на MONITOR
-    find_substring = "GET /reset_envir";
-    auto position = request.find(find_substring);
 
-    if(position != std::string::npos)
-    {     
-        return 0xF0; // сброс значений окружающей среды, по умолчанию: AirTemp 25, Emissivity 1, ReflectTemp 25, Humidity 1, Distance 2   
-    }
-
-    // запрос на установку конфигурационных параметров тепловизора
-    find_substring = "GET /set_params";
-    position = request.find(find_substring);
-    if(position != std::string::npos)
-    {     
-        return 0xF3; 
-    }
-
-    return 0xFF; // если ничего не подошло
-}
 
 
 void * PingDeviceThread(void * args)
@@ -248,7 +228,18 @@ void InitialSDK() // здесь не должны быть функции SDK, �
     pSdk != NULL ? std::cout << "\tСоздание дескриптора SDK - ОК\n" << std::endl : std::cout << "\tСоздание дескриптора SDK: FAIL\n" << std::endl;
 
     // шаг 4. логин в устройство. Хотя скорее это применение параметров подключения к устройству для SDK (то есть SDK теперь будет знать куда стучаться)
-    GetConfigForConnectCAM("config"); // сначала заполненяем структуру ChannelInfo исходя из config-файла: IP, порт, логин, пароль
+    std::string ConfigPath;
+    if(getenv("AT61F_CONFIG_PATH")==NULL)
+    {
+        std::cout << "Не задана переменная среды с путем расположения config-файла. Завершение работы" << std::endl;
+        exit(1);
+    }
+    else
+    {
+        ConfigPath = getenv("AT61F_CONFIG_PATH");
+    }
+    
+    GetConfigForConnectCAM(ConfigPath); // сначала заполненяем структуру ChannelInfo исходя из config-файла: IP, порт, логин, пароль
     int isLogin = (sdk_loginDevice(pSdk, Device_Info) == 0);
     std::cout << (isLogin?"\tПрименение параметров к SDK - ОК\n":"Применение параметров к SDK - FAIL\n") << std::endl;
     if(!isLogin)
@@ -282,8 +273,53 @@ int DeviceConnect()
 
 
 
-// чтение файла конфига для подключения к камере и частичное заполнение структуры ChannelInfo
-void GetConfigForConnectCAM(std::string path)
+
+
+int SetTempLimit(int32_t tmin, int32_t tmax)
+{
+    std::cout << "\tУстановка температурных порогов..." << std::endl;  
+    SettedTmin = tmin; // наш температурный порог
+    SettedTmax = tmax; // наш температурный порог
+    TminmaxFlag=true;                          // поднимаем флаг о том что значения установлены
+    return 0;
+}
+
+
+int SetEnvirParams()
+{
+    std::cout << "Устанавливаем параметры окружающей среды" << std::endl;
+    envir_param envir_data;         //структура для установки физических параметров (окружающей среды)
+
+    envir_data.airTemp = strtof(AirTemp.c_str(), nullptr) * 10000;
+    envir_data.emissivity = strtof(Emissivity.c_str(), nullptr) * 10000;
+    envir_data.reflectTemp = envir_data.airTemp;
+    envir_data.humidity = strtof(Humidity.c_str(), nullptr) * 10000;
+    envir_data.distance = strtof(Distance.c_str(), nullptr) * 10000;
+
+    if(sdk_set_envir_param(pSdk, Device_Info, envir_data)==-1)
+    {
+        std::cout << "Не получилось установить параметры окружающей среды" << std::endl;
+        return 1;
+    }
+        std::cout << "Установка параметров окружающей среды: ОК" << std::endl;
+
+
+    return 0;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+// ===== Чтение файла конфигурации и заполнение структуры ChannelInfo =====
+int GetConfigForConnectCAM(std::string path)
 {    
     std::string config = GetContentFromFile(path);
     int vsp1 = (int) config.find("ip=");
@@ -302,9 +338,7 @@ void GetConfigForConnectCAM(std::string path)
     vsp2 = (int) config.find(";", vsp2+1);
     std::string pass = config.substr(vsp1+5, vsp2-vsp1-5);
 
-    vsp1 = (int) config.find("CapturePath=");
-    vsp2 = (int) config.find(";", vsp2+1);
-    CapturePath = config.substr(vsp1+12, vsp2-vsp1-12);
+
 
 
     vsp1 = (int) config.find("AirTemp=");
@@ -354,8 +388,6 @@ void GetConfigForConnectCAM(std::string path)
     std::cout << "\tTmin: " << tmin << std::endl;
     std::cout << "\tTmax: " << tmax << std::endl;
 
-    std::cout << "\n\n\tПуть для сохранения снимков:" << CapturePath <<  std::endl;
-
     // заполнение данных для подключения
     strcpy_s(Device_Info.szServerName, "AT61F-CAM");
     strcpy_s(Device_Info.szIP, host.c_str());
@@ -367,138 +399,5 @@ void GetConfigForConnectCAM(std::string path)
     SetTempLimit(atoi(tmin.c_str()), atoi(tmax.c_str()));
 
 
-}
-
-int SetTempLimit(int32_t tmin, int32_t tmax)
-{
-    std::cout << "\tУстановка температурных порогов..." << std::endl;  
-    SettedTmin = tmin; // наш температурный порог
-    SettedTmax = tmax; // наш температурный порог
-    TminmaxFlag=true;                          // поднимаем флаг о том что значения установлены
     return 0;
 }
-
-
-int SetEnvirParams()
-{
-    std::cout << "Устанавливаем параметры окружающей среды" << std::endl;
-    envir_param envir_data;         //структура для установки физических параметров (окружающей среды)
-
-    envir_data.airTemp = strtof(AirTemp.c_str(), nullptr) * 10000;
-    envir_data.emissivity = strtof(Emissivity.c_str(), nullptr) * 10000;
-    envir_data.reflectTemp = envir_data.airTemp;
-    envir_data.humidity = strtof(Humidity.c_str(), nullptr) * 10000;
-    envir_data.distance = strtof(Distance.c_str(), nullptr) * 10000;
-
-    if(sdk_set_envir_param(pSdk, Device_Info, envir_data)==-1)
-    {
-        std::cout << "Не получилось установить параметры окружающей среды" << std::endl;
-        return 1;
-    }
-        std::cout << "Установка параметров окружающей среды: ОК" << std::endl;
-
-
-    return 0;
-}
-
-
-
-// =========== ВПИСАТЬ В ФАЙЛ ===========
-int RewriteFileContent(int target, std::string value)
-{   
-    std::string content = GetContentFromFile("config");
-    int vsp1;
-    int vsp2;
-
-    switch(target)
-    {
-        case 1: // установка окружающей температуры
-            vsp1 = (int) content.find("AirTemp=");
-            vsp2 = (int) content.find(";", vsp1);
-            content.erase(vsp1+8, vsp2-vsp1-8);
-            content.insert(vsp1+8, value);
-            break;
-
-        case 2:
-            vsp1 = (int) content.find("Distance=");
-            vsp2 = (int) content.find(";", vsp1);
-            content.erase(vsp1+9, vsp2-vsp1-9);
-            content.insert(vsp1+9, value);
-            break;
-
-        case 3:
-            vsp1 = (int) content.find("Emissivity=");
-            vsp2 = (int) content.find(";", vsp1);
-            content.erase(vsp1+11, vsp2-vsp1-11);
-            content.insert(vsp1+11, value);
-            break;
-
-        case 4:
-            vsp1 = (int) content.find("Humidity=");
-            vsp2 = (int) content.find(";", vsp1);
-            content.erase(vsp1+9, vsp2-vsp1-9);
-            content.insert(vsp1+9, value);
-            break;
-
-        case 5:
-            vsp1 = (int) content.find("Tmin=");
-            vsp2 = (int) content.find(";", vsp1);
-            content.erase(vsp1+5, vsp2-vsp1-5);
-            content.insert(vsp1+5, value);
-            break;
-
-        case 6:
-            vsp1 = (int) content.find("Tmax=");
-            vsp2 = (int) content.find(";", vsp1);
-            content.erase(vsp1+5, vsp2-vsp1-5);
-            content.insert(vsp1+5, value);
-            break;
-
-
-    }
-
-    std::ofstream file("config");
-    file << content;
-
-    return 0;
-}
-
-
-// =========== ВЗЯТЬ СОДЕРЖИМОЕ ФАЙЛА ===========
-std::string GetContentFromFile(const std::string & filePath) // функция от Алертера
-{
-    std::ifstream f1;
-    std::vector<char> buf(2024, 0);
-    
-    f1.open(filePath, std::ios::in);
-    f1.read(&buf[0], buf.size());
-
-    return buf.data();
-}
-
-
-// функция для работы со временем. Форматы: 0 - выдача строки с датой, 1 - выдача строки с датой и временем, 2 - чисто время
-std::string GetCurrentTimestamp(int format)
-{
-    char date_format[20];
-
-    std::time_t unixtimestamp = time(0);
-    tm * ltm = localtime(&unixtimestamp);
-
-    switch(format)
-    {
-        case 0:
-            strftime(date_format, sizeof(date_format), "%Y-%m-%d", ltm);
-            break;
-        case 1:
-            strftime(date_format, sizeof(date_format), "%Y-%m-%d_%H:%M:%S", ltm);
-            break;
-        case 2:
-            strftime(date_format, sizeof(date_format), "%H:%M:%S", ltm);
-            break;
-    }
-
-    std::string date_string = date_format;
-    return date_string;   
-}
-

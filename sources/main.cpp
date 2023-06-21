@@ -1,16 +1,18 @@
 #include <iostream>
 #include <string>
-#include "include/InfraredTempSDK.h"
-#include "headers/3l_functions.h"
+#include "../include/InfraredTempSDK.h"
+#include "../headers/3l_functions.h"
 #include <array>
 #include <cstdint>
 #include <cstring>
 #include <string_view>
 #include <pthread.h>
+#include <string>
 
 
-constexpr std::string_view version = "1.0"; // версия это программы
-std::string CapturePath;                    // путь к снимкам
+#define NETPORT 30001                           // порт на который сядет эта программа
+constexpr std::string_view version = "1.0";     // версия это программы
+
 
 std::string AirTemp;
 std::string Emissivity;
@@ -18,14 +20,13 @@ std::string ReflectTemp;
 std::string Humidity;
 std::string Distance;
 
-#define NETPORT 30001             // порт на который сядет эта программа
+
 
 bool SDK_INIT = false;
 
 int32_t SettedTmax = 0;         // максимальный порог температуры для срабатывания сигнала
 int32_t SettedTmin = 0;         // минимальный порог температуры для срабатывания сигнала
 bool TminmaxFlag = false;       // флаг установки порога минимальной и максимальной температуры
-
 
 IRNETHANDLE pSdk;                 // дескриптор для работы с SDK
 struct ChannelInfo Device_Info;   // структура с информацией о подключении к устройству, заполняется автоматически чтением config-файла
@@ -35,7 +36,38 @@ struct ChannelInfo Device_Info;   // структура с информацие�
 
 int main()
 {
-  
+    std::string ConfigPath;     // путь к конфигурационному файлу, который требуется взять из переменной среды
+    std::string CapturePath;    // путь к снимкам, который требуется взять из переменной среды
+
+    // чтение переменных среды
+    if(getenv("AT61F_CONFIG_PATH")==NULL)
+    {
+        std::cout << "Не задана переменная среды с путем расположения config-файла. Завершение работы" << std::endl;
+        exit(1);
+    }
+    else
+    {
+        ConfigPath = getenv("AT61F_CONFIG_PATH");
+        std::cout << "Расположение config-файла: " << ConfigPath <<  std::endl;
+    }
+
+    if(getenv("AT61F_CAPTURE_PATH")==NULL)
+    {
+        std::cout << "Не задана переменная среды с путем сохранения снимков. Завершение работы" << std::endl;
+        exit(1);
+    }
+    else
+    {
+        CapturePath = getenv("AT61F_CAPTURE_PATH");
+        std::cout << "Путь для сохранения снимков:" << CapturePath <<  std::endl;
+    }
+
+
+
+    //RewriteFileContent(ConfigPath, "port=", std::to_string(888));
+
+    //exit(1);
+
     Area_Temp area_temp = { 0 };    // структура куда SDK по запросу будет класть температурные данные текущего кадра
     
 
@@ -47,8 +79,6 @@ int main()
     int32_t SettedHumidity = 0;     // влажность
 
     // Устанавливаемые программные параметры для взаимодействия с ПО Вектор
-
-    
 
     int32_t PixCoordX = 0;          // переменная для хранения координаты X пикселя
     int32_t PixCoordY = 0;          // переменная для хранения координаты Y пикселя
@@ -102,8 +132,6 @@ int main()
 
     while(true)
     {
-
-
         std::array<uint8_t, 327680> response_temp_data = {0}; // массив для всех пикселей
 
         int vsp_res = 999;
@@ -156,24 +184,13 @@ int main()
 
         uint8_t Command;   // переменная куда мы положим номер команды, которая пришла
 
-        // Шаг проверки на HTTP
+    
         std::string currentRequest(Receive_Buff, bytes_recv);
-        uint8_t httpreq = CheckHTTPRequest(currentRequest);
 
-        
-        if(httpreq != 0xFF)
-        {
-            std::cout << "Это HTTP-запрос. Тип запроса:" << httpreq << std::endl;
-            Command = httpreq;
-            printf("Тип HTTP-запроса: %02X \n", Command);
-        }
-        else
-        {
-            std::cout << "Похоже это не HTTP-запрос. Тип запроса:" << httpreq << std::endl;
-            // берем первый байт чтобы узнать тип запроса
-            Command = Receive_Buff[0];
-            printf("Тип запроса: %02X \n", Command);
-        }
+        // берем первый байт чтобы узнать тип запроса
+        Command = Receive_Buff[0];
+        printf("Тип запроса: %02X \n", Command);
+
        
        std::string RestRequestText(Receive_Buff+1, bytes_recv-1); // сохраняем оставшуюся часть запроса в виде текста
         
@@ -351,13 +368,14 @@ int main()
 
             case 31:
                 std::cout << "Пришла команда на установку температуры окружающей среды" << std::endl;
+ 
                 if((bytes_recv) == sizeof(GETAIRTEMP))
                 {
                     memcpy(&AirTempStructData, Receive_Buff, sizeof(AirTempStructData));
                     std::cout << "\tAirTemp: " << (int) AirTempStructData.around_temp << std::endl;
                     std::cout << "\tУстанавливаем эти значения..." << std::endl;
                     // здесь надо вписывать в файл, после чего сделать реинициализацию SDK и переподключение к устройству, чтобы считать новые параметры из файла
-                    RewriteFileContent(1, std::to_string(AirTempStructData.around_temp));
+                    RewriteFileContent(ConfigPath, "AirTemp=", std::to_string(AirTempStructData.around_temp));
                     OutputStructData.error = 0x00;
                 }
                 else
@@ -377,7 +395,7 @@ int main()
                     memcpy(&DistanceStructData, Receive_Buff, sizeof(DistanceStructData));
                     std::cout << "\tDistance: " << (int) DistanceStructData.distance << std::endl;
 
-                    RewriteFileContent(2, std::to_string(DistanceStructData.distance));
+                    RewriteFileContent(ConfigPath, "Distance=", std::to_string(DistanceStructData.distance));
                 }
                 else
                 {
@@ -397,8 +415,8 @@ int main()
                     std::cout << "\tEmissivity: " << (float) EnvirParamStructData.emissivity << std::endl;
                     std::cout << "\tHumidity: " << (float) EnvirParamStructData.humidity << std::endl;
 
-                    RewriteFileContent(3, std::to_string(EnvirParamStructData.emissivity));
-                    RewriteFileContent(4, std::to_string(EnvirParamStructData.humidity));
+                    RewriteFileContent(ConfigPath, "Emissivity=", std::to_string(EnvirParamStructData.emissivity));
+                    RewriteFileContent(ConfigPath, "Humidity=",  std::to_string(EnvirParamStructData.humidity));
                 }
                 else
                 {
@@ -424,8 +442,8 @@ int main()
                     std::cout << "\tУстанавливаем эти пороги..." << std::endl;    
 
                     // из
-                    RewriteFileContent(5, std::to_string(TempLimitStructData.min_t));
-                    RewriteFileContent(6, std::to_string(TempLimitStructData.max_t));
+                    RewriteFileContent(ConfigPath, "Tmin=",  std::to_string(TempLimitStructData.min_t));
+                    RewriteFileContent(ConfigPath, "Tmax=",  std::to_string(TempLimitStructData.max_t));
 
 
                     OutputStructData.error = 0x00; // флаг для ответа что все хорошо
