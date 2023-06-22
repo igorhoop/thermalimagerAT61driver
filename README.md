@@ -1,3 +1,8 @@
+Задание переменных среды
+export AT61F_CAPTURE_PATH=/home/hoop/MY_PROG_PROJECTS/AT61F/development/photos/
+export AT61F_CONFIG_PATH=/home/hoop/MY_PROG_PROJECTS/AT61F/development/config/config
+
+
 Программа ищет файл конфигурации по пути:
 /etc/at61f/config
 При запуске контейнера нужно смонтировать каталог с таким файлом по этому пути.

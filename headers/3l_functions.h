@@ -1,3 +1,5 @@
+#include <array>
+
 void InitialSDK();
 int DeviceConnect();
 
@@ -13,6 +15,14 @@ int WaitDevice();
 int SetEnvirParams();
 int RewriteFileContent(std::string file_path, std::string option_name, std::string value);
 int SetTempLimit(int32_t tmin, int32_t tmax);
+int RequestTemperatures(struct SENDPARAM * OutputData);
+int MakeCapture(std::string capture_path, std::string capture_name, struct SENDPARAM * OutputData);
+int SetAirTemp(std::string config_path, int8_t AirTemp);
+int SetDistance(std::string config_path, int8_t Distance);
+int SetEmissivityHumidity(std::string config_path, float Emissivity, float Humidity);
+int SetTemperatureLimit(std::string config_path, int32_t tmin, int32_t tmax);
+int GetTemperaturePixel(std::string capture_path, int32_t x, int32_t y, struct SENDPARAM * OutputData);
+int GetMapPixel(std::string capture_path, std::array<uint8_t, 327680> &response_temp_data);
 
 // net
 int PortOpen();
@@ -41,7 +51,7 @@ struct SENDPARAM {
 
 struct GETAIRTEMP {
  uint8_t cmd; 
- int8_t around_temp;
+ int8_t air_temp;
 };
 
 struct GETDISTANCE {

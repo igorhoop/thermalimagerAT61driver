@@ -7,8 +7,6 @@
 #include <ctime>
 #include <vector>
 #include <iostream>
-
-
 #include "../headers/3l_functions.h"
 
 
