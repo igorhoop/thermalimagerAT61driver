@@ -13,12 +13,14 @@
 
 extern IRNETHANDLE pSdk;
 extern struct ChannelInfo Device_Info;
-extern envir_param envir_data;
+//extern envir_param envir_data;
 
-extern std::string AirTemp;
-extern std::string Emissivity;
-extern std::string Humidity;
-extern std::string Distance;
+
+std::string AirTemp;  // избавиться от этих глобальных переменных
+std::string Emissivity;
+std::string ReflectTemp;
+std::string Humidity;
+std::string Distance;
 
 extern bool SDK_INIT;
 
@@ -488,10 +490,11 @@ int SetEnvirParams()
     envir_param envir_data;         //структура для установки физических параметров (окружающей среды)
 
     envir_data.airTemp = strtof(AirTemp.c_str(), nullptr) * 10000;
+    envir_data.distance = strtof(Distance.c_str(), nullptr) * 10000;
     envir_data.emissivity = strtof(Emissivity.c_str(), nullptr) * 10000;
     envir_data.reflectTemp = envir_data.airTemp;
     envir_data.humidity = strtof(Humidity.c_str(), nullptr) * 10000;
-    envir_data.distance = strtof(Distance.c_str(), nullptr) * 10000;
+    
 
     if(sdk_set_envir_param(pSdk, Device_Info, envir_data)==-1)
     {

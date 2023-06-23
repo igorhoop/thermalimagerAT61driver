@@ -1,26 +1,10 @@
 #include <iostream>
-#include <string>
 #include "../include/InfraredTempSDK.h"
 #include "../headers/3l_functions.h"
-#include <array>
-#include <cstdint>
 #include <cstring>
-#include <string_view>
 #include <pthread.h>
-#include <string>
 
-
-#define NETPORT 30001                           // порт на который сядет эта программа
 constexpr std::string_view version = "1.0";     // версия это программы
-
-
-std::string AirTemp;
-std::string Emissivity;
-std::string ReflectTemp;
-std::string Humidity;
-std::string Distance;
-
-
 
 bool SDK_INIT = false;
 
@@ -32,11 +16,15 @@ IRNETHANDLE pSdk;                 // дескриптор для работы с
 struct ChannelInfo Device_Info;   // структура с информацией о подключении к устройству, заполняется автоматически чтением config-файла
 
 
-std::string CapturePath;    // путь к снимкам, который требуется взять из переменной среды
 
 int main()
 {
+    std::string CapturePath;    // путь к снимкам, который требуется взять из переменной среды
     std::string ConfigPath;     // путь к конфигурационному файлу, который требуется взять из переменной среды
+    
+    std::cout << "Старт модуля взаимодействия с тепловизором AT61F (Infiray)." << std::endl;
+    std::cout << "Version: " << version << std::endl;
+
     
 
     // чтение переменных среды
@@ -62,37 +50,28 @@ int main()
         std::cout << "Путь для сохранения снимков:" << CapturePath <<  std::endl;
     }
  
-    // Устанавливаемые физические параметры для тепловизора
-    int32_t SettedDist = 0;         // расстояние до объекта
-    int32_t SettedEmissivity = 0;   // излучаемость объекта
-    int32_t SettedReflectTemp = 0;  // отражающаяся от поверхности температура
-    int32_t SettedHumidity = 0;     // влажность
-
-    // Устанавливаемые программные параметры для взаимодействия с ПО Вектор
-
-    int32_t PixCoordX = 0;          // переменная для хранения координаты X пикселя
-    int32_t PixCoordY = 0;          // переменная для хранения координаты Y пикселя
-    
-    unsigned short temp_data[640*512] = { 0 };     // !!! могут быть минусовые, поправить тип. буфер для хранения температурной матрицы 
-    unsigned char image_data[1000*1000] = { 0 };    // буфер для хранения RGB-данных снимка. С размером буфера не разобрался
-
-    std::cout << "Version: " << version << std::endl;
-    std::cout << "Это драйвер для тепловизора AT61F (производства Infiray)." << std::endl;
-        
+    // Старт контролирующего соединение потока
     pthread_t thread;
     int result_thread;
     result_thread = pthread_create(&thread, NULL, &PingDeviceThread, NULL);
 
+
+
+    // создаем абстракционный сетевой объект
+    NETABSTRACTION NetObject;
+    //NetObject.port = NETPORT;
+    int vsp = NetObject.Initialization(30001);
+    if(vsp != 0)
+        exit(1);
+
+    /*
     // СЕТЕВЫЕ УСТАНОВКИ
-    int bytes_send;         // количество отправленных клиенту байт
-    int bytes_recv;         // количество полученных от клиента байт
-    int listener_socket;    // дескриптор слушающего сокета
-    int exchange_socket;    // десприктор сокета для обмена данными с клиентом
-    sockaddr_in ServerAddr; // адресная структура, которую нужно заполнить и связать с сокетом. Хранит IP-адрес
-    sockaddr_in ClientAddr; // адресная структура клиента для инфы о нем, которая будет заполняться при приходе от него сообщений
-    int ClientAddrSize = sizeof(ClientAddr); // адрес этой переменной, в которой лежит размер структуры, передадим функции accept()
+
+   
     sockaddr * addr;
     socklen_t * addr_size;
+
+
     ServerAddr.sin_family = AF_INET;
     ServerAddr.sin_addr.s_addr = INADDR_ANY; // раннее было inet_addr(my_ip), таким образом привяжемся к конкретному сетевому интерфейсу. Либо использовать INADDR_ANY, для входящих от всех интерфейсов
     ServerAddr.sin_port = htons(NETPORT);      // занимаемый порт на моем компьютере
@@ -108,15 +87,23 @@ int main()
         std::cerr << "Ошибка Listen";
     }
     char * Receive_Buff = new char[100];    // сетевой приемный буфер
-
+    */  
 
 
     while(true)
     {
-        std::array<uint8_t, 327680> response_temp_data = {0}; // массив для всех пикселей
+        // === переменные необходимые для итерации ===
+        std::array<uint8_t, 327680> response_temp_data = {0};       // массив для всех пикселей
+        int32_t PixCoordX = 0;                                      // переменная для хранения координаты X пикселя
+        int32_t PixCoordY = 0;                                      // переменная для хранения координаты Y пикселя
 
-        int vsp_res = 999;
         envir_param get_envir_data;
+
+        uint8_t Command;   // переменная куда мы положим номер команды, которая пришла
+
+        // переменная от которой будет зависеть длина ответного пакета
+        int32_t Answer_size = 0;
+
 
         SENDPARAM OutputStructData = {0};
         GETTEMPLIM TempLimitStructData = {0};
@@ -124,17 +111,10 @@ int main()
         GETAIRTEMP AirTempStructData = {0};
         GETENVIRPARAMS EnvirParamStructData = {0};
 
-        std::string TempPath;// начало формируемого пути для файла (берется из config файла)
+        printf("\n ==== ЖДЕМ КОМАНДУ ОТ РОБОТА ==== \n____________\n\n");
+        NetObject.Receive();
 
-        // СОЗДАНИЕ ИМЕНИ СНИМКОВ И ПОДКАТАЛОГОВ ДЛЯ ИХ МЕСТОПОЛОЖЕНИЯ
-        std::string CaptureName = "";          // сюда будет класться имя снимка
-        std::string TodayDirName = "";         // сюда будет класть имя сегодняшней директории-даты
-
-
-
-
-
-        printf("\n\n\n ==== ЖДЕМ КОМАНДУ ОТ РОБОТА ==== \n____________\n\n");
+        /*
         exchange_socket = accept(listener_socket, (sockaddr *) &ClientAddr, (socklen_t *) &ClientAddrSize); // а вот здесь уже блокируется программа. Извлекает первый запрос из очереди либо если очередь пустая ждет и блокирует программу до первого соединения
         if(exchange_socket >= 0)
         {
@@ -146,14 +126,11 @@ int main()
             std::cout << errno;
             break;
         }
-        
         std::string his_ip = "";
         his_ip = inet_ntoa(ClientAddr.sin_addr);
         printf("\tIP-адрес подключившегося: %s \n", his_ip.c_str()) ;
         printf("\tЕго порт: %d\n", ClientAddr.sin_port);
         std::cout << "\tВремя подключения: " << GetCurrentTimestamp(1) << std::endl;
-
-
         // получение данных из сокета
         bytes_recv = recv(exchange_socket, Receive_Buff, 100, 0);
         std::cout << "\tПришло байт: " << bytes_recv << std::endl;
@@ -163,25 +140,19 @@ int main()
             printf("0x%02X, ", Receive_Buff[i]); // отображаем принятые байты
         }
         std::cout << std::endl << std::endl;
+        */
 
 
-        uint8_t Command;   // переменная куда мы положим номер команды, которая пришла
 
     
-        std::string currentRequest(Receive_Buff, bytes_recv);
+        //std::string currentRequest(Receive_Buff, bytes_recv);
 
         // берем первый байт чтобы узнать тип запроса
-        Command = Receive_Buff[0];
+        Command = NetObject.Receive_Buff[0];
         printf("Тип запроса: %02X \n", Command);
 
        
-       std::string RestRequestText(Receive_Buff+1, bytes_recv-1); // сохраняем оставшуюся часть запроса в виде текста
-        
-        
-
-        // переменная от которой будет зависеть длина ответного пакета
-        int32_t Answer_size = 0;
-
+        std::string RestRequestText(NetObject.Receive_Buff+1, NetObject.bytes_recv-1); // сохраняем оставшуюся часть запроса в виде текста
         
 
         switch(Command)
@@ -200,9 +171,9 @@ int main()
 
 
             case 31: // УСТАНОВКА ТЕМПЕРАТУРЫ ОКРУЖАЮЩЕЙ СРЕДЫ
-                if((bytes_recv) == sizeof(GETAIRTEMP))
+                if((NetObject.bytes_recv) == sizeof(GETAIRTEMP))
                 {
-                    memcpy(&AirTempStructData, Receive_Buff, sizeof(AirTempStructData));
+                    memcpy(&AirTempStructData, NetObject.Receive_Buff, sizeof(AirTempStructData));
                     SetAirTemp(ConfigPath, AirTempStructData.air_temp);
                     OutputStructData.error = 0x00;
                 }
@@ -216,9 +187,9 @@ int main()
 
 
             case 32: // УСТАНОВКА ДИСТАНЦИИ
-                if((bytes_recv) == sizeof(GETDISTANCE))
+                if((NetObject.bytes_recv) == sizeof(GETDISTANCE))
                 {
-                    memcpy(&DistanceStructData, Receive_Buff, sizeof(DistanceStructData));
+                    memcpy(&DistanceStructData, NetObject.Receive_Buff, sizeof(DistanceStructData));
                     SetDistance(ConfigPath, DistanceStructData.distance);
                     OutputStructData.error = 0x00;
                 }
@@ -231,9 +202,9 @@ int main()
                 break;
 
             case 33: // УСТАНОВКА ИЗЛУЧАЕМОСТИ И ВЛАЖНОСТИ
-                if((bytes_recv) == sizeof(GETENVIRPARAMS))
+                if((NetObject.bytes_recv) == sizeof(GETENVIRPARAMS))
                 {
-                    memcpy(&EnvirParamStructData, Receive_Buff, sizeof(EnvirParamStructData));
+                    memcpy(&EnvirParamStructData, NetObject.Receive_Buff, sizeof(EnvirParamStructData));
                     SetEmissivityHumidity(ConfigPath, EnvirParamStructData.emissivity, EnvirParamStructData.humidity);
                     OutputStructData.error = 0x00;
                 }
@@ -248,8 +219,8 @@ int main()
 
 
             case 4: // ЗАПРОС ТЕМПЕРАТУРЫ ПИКСЕЛЯ
-                std::memcpy(&PixCoordX, &Receive_Buff[1], sizeof(uint32_t));
-                std::memcpy(&PixCoordY, &Receive_Buff[5], sizeof(uint32_t));
+                std::memcpy(&PixCoordX, &NetObject.Receive_Buff[1], sizeof(uint32_t));
+                std::memcpy(&PixCoordY, &NetObject.Receive_Buff[5], sizeof(uint32_t));
                 GetTemperaturePixel(CapturePath, PixCoordX, PixCoordY, &OutputStructData);
                 OutputStructData.error = 0x00;
 
@@ -272,10 +243,10 @@ int main()
 
 
 
-            case 6: // УСТАНОВКА ПАРАМЕТРОВ ОКРУЖАЮЩЕЙ СРЕДЫ И НУЖНЫХ НАМ ТЕМПЕРАТУРНЫХ ПОРОГОВ
-                if((bytes_recv) == sizeof(GETTEMPLIM))
+            case 6: // УСТАНОВКА НУЖНЫХ НАМ ТЕМПЕРАТУРНЫХ ПОРОГОВ
+                if((NetObject.bytes_recv) == sizeof(GETTEMPLIM))
                 {
-                    memcpy(&TempLimitStructData, Receive_Buff, sizeof(TempLimitStructData));
+                    memcpy(&TempLimitStructData, NetObject.Receive_Buff, sizeof(TempLimitStructData));
                     SetTemperatureLimit(ConfigPath, TempLimitStructData.min_t, TempLimitStructData.max_t);
                     OutputStructData.error = 0x00; // флаг для ответа что все хорошо
                 }
@@ -312,13 +283,13 @@ int main()
                 break;
 
 
+            // === отладочные случаи ===
             case 0x91: // принудительная реинициализация
                 std::cout << "Принудительная реинициализация...\n" << std::endl;   
                 ReinitialAndConnect();
                 break;
-
             case 0x92: // чтение текущих параметров окружающей среды
-                std::cout << "Чтение...\n" << std::endl;   
+                std::cout << "Чтение текущих установленных параметров окружающей среды...\n" << std::endl;   
                 sdk_get_envir_param(pSdk, Device_Info, &get_envir_data);
                 std::cout << "Current physical paramerers:" << std::endl; 
                 std::cout << "\tairTemp: " << get_envir_data.airTemp << std::endl;
@@ -331,10 +302,7 @@ int main()
                 std::cout << "Current temperature limits:" << std::endl; 
                 std::cout << "\tTmin: " << SettedTmin << std::endl;
                 std::cout << "\tTmax: " << SettedTmax << std::endl;
-
                 break;
-
-
 
             default: 
                 std::cout << "Неизвестный тип запроса. Ответ не отправляем" << std::endl;
@@ -347,33 +315,32 @@ int main()
         int result;
         if(Answer_size==327680)
         {
-            result = send(exchange_socket, &response_temp_data, Answer_size, 0);
-            std::cout << "Отправляем обратно количество байт: " << result << std::endl;
-
+            NetObject.Send(&response_temp_data, Answer_size);
         }
         else
         {
-        result = send(exchange_socket, &OutputStructData, Answer_size, 0);
-        std::cout << "Отправляем обратно количество байт: " << result << std::endl;
+            NetObject.Send(&OutputStructData, Answer_size);
 
-        // покажем в консоли что было отправлено
-        char ArrayStructData[100];  // сюда скопируем байты структуры чтобы вывести в консоли побайтово  
-        std::memcpy(ArrayStructData, &OutputStructData, Answer_size);
-        std::cout << "\tСостав ответной посылки: ";
-        for(int i=0; i < Answer_size; i++)
-        {
-            printf("0x%02X, ", ArrayStructData[i]); // отображаем принятые байты
-        }
-        std::cout << std::endl << std::endl << std::endl;
+            // покажем в консоли что было отправлено
+            char ArrayStructData[100];  // сюда скопируем байты структуры чтобы вывести в консоли побайтово  
+            std::memcpy(ArrayStructData, &OutputStructData, Answer_size);
+            std::cout << "\tСостав ответной посылки: ";
+            for(int i=0; i < Answer_size; i++)
+            {
+                printf("0x%02X, ", ArrayStructData[i]); // отображаем принятые байты
+            }
+            std::cout << std::endl << std::endl << std::endl;
         }
 
-        close(exchange_socket); 
+      
         continue;
 
     }
 
     sdk_release(pSdk);
-    close(listener_socket);
+
+    NetObject.End();
+    //close(listener_socket);
     return 0;
 }
 
