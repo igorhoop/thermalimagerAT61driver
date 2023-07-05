@@ -37,9 +37,11 @@ int PortOpen();
 
 // threads
 void * PingDeviceThread(void * args);
+void * WindowThread(void * args);
 
 
-
+// windows
+void DrawMap(std::array<uint8_t, 327680> data);
 
 // callbacks
 void TempCallBackMy(char *pBuffer, long BufferLen, void* pContext);
@@ -102,7 +104,7 @@ class NETABSTRACTION
         {
             int res;
             res=send(exchange_socket, buf, len, 0);
-            std::cout << "Отправляем обратно количество байт: " << result << std::endl;
+            std::cout << "Отправляем обратно количество байт: " << res << std::endl;
 
 
             close(exchange_socket); // закрываем соединение

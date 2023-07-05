@@ -2,25 +2,49 @@
 #include <string>
 #include <vector>
 #include <cstring>
+#include <unistd.h>
 
 extern char curCapName[50];
+
+std::vector<unsigned short> _temp_data(640 * 512);
 
 // ФУНКЦИЯ-ОБРАБОТЧИК ПРИХОДА ТЕМПЕРАТУРНОЙ МАТРИЦЫ
 void TempCallBackMy(char *pBuffer, long BufferLen, void* pContext)
 {
-    std::vector<unsigned short> _temp_data(1280 * 1024);
+    int min = 5000, max = 0;
 
-    std::cout << "Пришли данные по температуре. Длина буфера: " << BufferLen << std::endl;
+    //std::cout << "Пришли данные по температуре. Длина буфера: " << BufferLen << std::endl;
     
 
     float celsius_point;
     memcpy(_temp_data.data(), pBuffer, BufferLen);
-    //обработка первых 100 элементов буфера
-    for (int i = 0; i < 100; i++)
+
+    //printf("Рандомный элемент: %d \n", _temp_data[1200]);
+    
+    for (int i = 0; i < 327636; i++) // больше чем в 327636 лежит какая-то параша
     {
-        celsius_point = ((_temp_data[i]+ 7000)/30) - 273.2;
-        std::cout << celsius_point << std::endl;
+        if(_temp_data[i]==0)
+            std::cout << "Номер нулевых: " << i << std::endl;
+
+        if(_temp_data[i]>3000)
+            std::cout << "Номер слишком больших: " << i << ". Значение: " << _temp_data[i] << std::endl;
+
+        if(_temp_data[i]<500)
+            std::cout << "Номер слишком маленьких: " << i << ". Значение: " << _temp_data[i] << std::endl;
+
+        if(_temp_data[i] < min)
+            min = _temp_data[i];
+        
+        if(_temp_data[i] > max)
+            max = _temp_data[i];
+
+        
+
+        //celsius_point = ((_temp_data[i]+ 7000)/30) - 273.2;
+        //std::cout << celsius_point << std::endl;
     }
+    std::cout << "Global MIN: " << min << std::endl;
+    std::cout << "Global MAX: " << max << std::endl;
 }
 
 

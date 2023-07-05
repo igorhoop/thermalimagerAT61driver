@@ -8,7 +8,7 @@
 #include <cstdlib>
 #include <cstring>
 
-
+#include <SFML/Graphics.hpp> // SFML
 
 
 extern IRNETHANDLE pSdk;
@@ -65,8 +65,9 @@ int GetMapPixel(std::string capture_path, std::array<uint8_t, 327680> &response_
         // далее извлекаем из irg файла данные
         FullPath.append(".irg");
         sdk_get_irg_data( (char *) FullPath.c_str(), 4, temp_data, image_data);
+
         
-        for(int i=0; i < 327680; i++)
+        for(int i=0; i < 327630; i++)
         {
             response_temp_data[i] = temp_data[i]/10 - 273.2;
         }
@@ -74,6 +75,8 @@ int GetMapPixel(std::string capture_path, std::array<uint8_t, 327680> &response_
 
         std::cout << "\tМассив подготовлен" << std::endl;
         remove(FullPath.c_str()); // удаляем irg файл
+
+           
 
         return 0;
     }
@@ -457,6 +460,8 @@ int DeviceConnect()
         std::cout << "\tСвязь ОК. Устанавливаем функции-обработчики..." << std::endl;
         // после инициализации требуется установить функции-обработчики (callback'и). Настройка относящайся к SDK, а значит не подвиснет программу при выключенном устройстве
         int res = SetSerialCallBack(pSdk, Device_Info, SerialCallBackMy, NULL);   // установка обработчика приема серийных данных
+        res = SetTempCallBack(pSdk, TempCallBackMy, NULL);
+
         std::cout << "\tУстановка функций обработчиков: " << res << std::endl;
 
         return 0;

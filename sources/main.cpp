@@ -4,6 +4,7 @@
 #include <cstring>
 #include <pthread.h>
 
+
 constexpr std::string_view version = "1.0";     // версия это программы
 
 bool SDK_INIT = false;
@@ -26,6 +27,7 @@ int main()
     std::cout << "Version: " << version << std::endl;
 
     
+
 
     // чтение переменных среды
     if(getenv("AT61F_CONFIG_PATH")==NULL)
@@ -54,6 +56,12 @@ int main()
     pthread_t thread;
     int result_thread;
     result_thread = pthread_create(&thread, NULL, &PingDeviceThread, NULL);
+
+
+    // Старт потока для работы с окном
+    pthread_t window_thread;
+    int result_window_thread;
+    result_window_thread = pthread_create(&window_thread, NULL, &WindowThread, NULL);
 
 
 
@@ -231,7 +239,8 @@ int main()
             case 5: // ЗАПРОС КАРТЫ ПИКСЕЛЕЙ
                 if(GetMapPixel(CapturePath, response_temp_data) == 0)
                 {
-                    Answer_size=327680; 
+                    Answer_size=327680;
+                    DrawMap(response_temp_data);
                 }
                 else
                 {
@@ -486,5 +495,5 @@ int main()
 
 
 
-    //int res = SetTempCallBack(pSdk, TempCallBackMy, NULL);
+    
     
