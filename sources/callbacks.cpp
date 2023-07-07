@@ -6,7 +6,32 @@
 
 extern char curCapName[50];
 
-std::vector<unsigned short> _temp_data(640 * 512);
+std::vector<unsigned short> _temp_data(640 * 512); // для температурной матрицы
+
+int _width = 384;       // ???
+int _height = 288;      // ???
+
+// ФУНКЦИЯ-ОБРАБОТЧИК ПРИХОДА ВИДЕОКАДРА
+void VideoCallBackMy(char *pBuffer, long BufferLen, int width, int height, void* pContext)
+{
+    std::cout << "Пришло байт(видеокадр): " << BufferLen << std::endl;
+    short videoData[124061];   //1280*1024*1.5 данные изображения
+    //_width = width;
+    //_height = height;
+    //memcpy(videoData, pBuffer, width*height *1.5);
+
+    //std::cout << "VideoCallBackReceive: _width=" << _width << std::endl;
+
+
+    //Пример отображения 100 предварительных данных
+    //for (int i = 0; i < 100; i++)
+    //    std::cout << videoData[i] << ",";
+
+    std::cout << std::endl;
+
+}
+
+
 
 // ФУНКЦИЯ-ОБРАБОТЧИК ПРИХОДА ТЕМПЕРАТУРНОЙ МАТРИЦЫ
 void TempCallBackMy(char *pBuffer, long BufferLen, void* pContext)

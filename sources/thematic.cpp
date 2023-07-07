@@ -461,8 +461,9 @@ int DeviceConnect()
         // после инициализации требуется установить функции-обработчики (callback'и). Настройка относящайся к SDK, а значит не подвиснет программу при выключенном устройстве
         int res = SetSerialCallBack(pSdk, Device_Info, SerialCallBackMy, NULL);   // установка обработчика приема серийных данных
         res = SetTempCallBack(pSdk, TempCallBackMy, NULL);
-
-        std::cout << "\tУстановка функций обработчиков: " << res << std::endl;
+        std::cout << "\tУстановка функций обработчиков (серийные данные): " << res << std::endl;
+        res = SetDeviceVideoCallBack(pSdk, VideoCallBackMy, NULL);
+        std::cout << "\tУстановка функций обработчиков (видео данные): " << res << std::endl;
 
         return 0;
     }

@@ -9,7 +9,7 @@ LIBS = -L/home/hoop/MY_PROG_PROJECTS/AT61F/development/lib -lInfraredTempSDK -lI
 
 #получение исполняемого файла путем компоновки объектных (пока только 1 объектный). 
 compile: objectfiles
-	g++ $(LFLAG) -o ./build/at61f -Wall -DVS_TRANMIST -fPIC -pthread $(INCLUDE) ./build/main.o ./build/thematic.o ./build/callbacks.o ./build/basis.o ./build/windows.o $(LIBS)
+	g++  $(LFLAG) -o ./build/at61f -Wall -DVS_TRANMIST -fPIC -pthread $(INCLUDE) ./build/main.o ./build/thematic.o ./build/callbacks.o ./build/basis.o ./build/windows.o $(LIBS)
 
 
 # получение объектного модуля из исходного кода. Получается ELF-файл типа "перемещаемый". Выполнить его пока нельзя, далее нужно его передать компоновщику 

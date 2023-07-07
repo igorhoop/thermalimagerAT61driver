@@ -255,7 +255,7 @@ void DrawChubkoColors(sf::VertexArray &Map)
 void * WindowThread(void * args)
 {
     sf::RenderWindow view_window;
-    view_window.create(sf::VideoMode(640, 600), "View Window");
+    view_window.create(sf::VideoMode(580, 600), "View Window");
 
     sf::VertexArray ThermalMap(sf::Points, 327680);
     
@@ -267,6 +267,8 @@ void * WindowThread(void * args)
     while(view_window.isOpen())
     {
         sf::Event event;
+
+        
 
         while(view_window.pollEvent(event))
         {
@@ -283,16 +285,12 @@ void * WindowThread(void * args)
                 view_window.clear(sf::Color::Black); // отрисовка в скрытый буфер
                 view_window.draw(ThermalMap);
                 view_window.display();
-                
-                
-                
             }
         }
 
         
-        //view_window.clear(sf::Color::Black); // отрисовка в скрытый буфер
-        //map_window.draw(ThermalMap);
-        //view_window.display();
+
+        //sleep(0.5);
     }
 }
 

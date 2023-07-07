@@ -47,6 +47,7 @@ void DrawMap(std::array<uint8_t, 327680> data);
 void TempCallBackMy(char *pBuffer, long BufferLen, void* pContext);
 void SerialCallBackMy(char *pRecvDataBuff, int BuffSize, void *context);
 void SnapCallBackMy(int m_ch, char *pBuffer, int size, void *context);
+void VideoCallBackMy(char *pBuffer, long BufferLen, int width, int height, void* pContext);
 
 
 

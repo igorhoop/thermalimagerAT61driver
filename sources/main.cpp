@@ -26,7 +26,7 @@ int main()
     std::cout << "Старт модуля взаимодействия с тепловизором AT61F (Infiray)." << std::endl;
     std::cout << "Version: " << version << std::endl;
 
-    
+
 
 
     // чтение переменных среды
