@@ -5,6 +5,9 @@
 #include <pthread.h>
 
 
+#include "../headers/Netabstraction.h"
+
+
 constexpr std::string_view version = "1.0";     // версия это программы
 
 bool SDK_INIT = false;
@@ -59,18 +62,18 @@ int main()
 
 
     // Старт потока для работы с окном
-    pthread_t window_thread;
-    int result_window_thread;
-    result_window_thread = pthread_create(&window_thread, NULL, &WindowThread, NULL);
+    //pthread_t window_thread;
+    //int result_window_thread;
+    //result_window_thread = pthread_create(&window_thread, NULL, &WindowThread, NULL);
 
 
 
     // создаем абстракционный сетевой объект
-    NETABSTRACTION NetObject;
+    Netabstraction NetObject(30001);
     //NetObject.port = NETPORT;
-    int vsp = NetObject.Initialization(30001);
-    if(vsp != 0)
-        exit(1);
+    //int vsp = NetObject.Initialization(30001);
+    //if(vsp != 0)
+    //    exit(1);
 
     /*
     // СЕТЕВЫЕ УСТАНОВКИ
@@ -348,8 +351,7 @@ int main()
 
     sdk_release(pSdk);
 
-    NetObject.End();
-    //close(listener_socket);
+    
     return 0;
 }
 
@@ -469,26 +471,26 @@ int main()
 
 // старый метод как я делал, потом через структуры сделали
 
-                /*
-
-                
+/*
 
 
 
-                std::memcpy(&SettedAroundT, &luxuary_buf[1], sizeof(uint32_t));
-                std::memcpy(&SettedDist, &luxuary_buf[5], sizeof(uint32_t));
-                std::memcpy(&SettedTmin, &luxuary_buf[9], sizeof(uint32_t));
-                std::memcpy(&SettedTmax, &luxuary_buf[13], sizeof(uint32_t));
 
-                std::cout << "Установленный AroundTemp=" << SettedAroundT << std::endl;
-                std::cout << "Установленный SettedDist=" << SettedDist << std::endl;
-                std::cout << "Установленный Tmin=" << SettedTmin << std::endl;
-                std::cout << "Установленный Tmax=" << SettedTmax << std::endl;
 
-                std::memcpy(&response_temp_data[1], &reserve_byte_1, sizeof(char));
-                std::memcpy(&response_temp_data[2], &reserve_byte_2, sizeof(char));
-                std::memcpy(&response_temp_data[3], &reserve_byte_3, sizeof(char));
-                */
+std::memcpy(&SettedAroundT, &luxuary_buf[1], sizeof(uint32_t));
+std::memcpy(&SettedDist, &luxuary_buf[5], sizeof(uint32_t));
+std::memcpy(&SettedTmin, &luxuary_buf[9], sizeof(uint32_t));
+std::memcpy(&SettedTmax, &luxuary_buf[13], sizeof(uint32_t));
+
+std::cout << "Установленный AroundTemp=" << SettedAroundT << std::endl;
+std::cout << "Установленный SettedDist=" << SettedDist << std::endl;
+std::cout << "Установленный Tmin=" << SettedTmin << std::endl;
+std::cout << "Установленный Tmax=" << SettedTmax << std::endl;
+
+std::memcpy(&response_temp_data[1], &reserve_byte_1, sizeof(char));
+std::memcpy(&response_temp_data[2], &reserve_byte_2, sizeof(char));
+std::memcpy(&response_temp_data[3], &reserve_byte_3, sizeof(char));
+*/
 
 
 
