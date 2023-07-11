@@ -1,10 +1,4 @@
 #include <array>
-#include <sys/socket.h> // расположение /usr/include/x86_64-linux-gnu/sys/
-#include <netdb.h> // этот хедер ради типа sockaddr_in, потому что в socket.h тлько обычный sockaddr
-#include <unistd.h>
-#include <arpa/inet.h> // это ради функции inet_addr(), которая преобразует символьный IP-адрес в сетевой с нужным порядком байт
-
-
 
 
 void InitialSDK();
@@ -82,5 +76,12 @@ struct GETTEMPLIM {
 };
 #pragma pack(pop)
 
-
+enum RESPONSE_TYPES {
+    TEMPERATURES,
+    TEMPERATURES_AND_SIGNAL,
+    RESULT_OF_COMMAND,
+    TEMPERATURE_PIXEL,
+    MAP,
+    NONE
+};
 

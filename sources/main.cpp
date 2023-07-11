@@ -4,11 +4,8 @@
 #include <cstring>
 #include <pthread.h>
 
-
 #include "../headers/Netabstraction.h"
 
-
-constexpr std::string_view version = "1.0";     // версия это программы
 
 bool SDK_INIT = false;
 
@@ -27,10 +24,6 @@ int main()
     std::string ConfigPath;     // путь к конфигурационному файлу, который требуется взять из переменной среды
     
     std::cout << "Старт модуля взаимодействия с тепловизором AT61F (Infiray)." << std::endl;
-    std::cout << "Version: " << version << std::endl;
-
-
-
 
     // чтение переменных среды
     if(getenv("AT61F_CONFIG_PATH")==NULL)
@@ -66,41 +59,10 @@ int main()
     //int result_window_thread;
     //result_window_thread = pthread_create(&window_thread, NULL, &WindowThread, NULL);
 
-
-
     // создаем абстракционный сетевой объект
     Netabstraction NetObject(30001);
-    //NetObject.port = NETPORT;
-    //int vsp = NetObject.Initialization(30001);
-    //if(vsp != 0)
-    //    exit(1);
 
-    /*
-    // СЕТЕВЫЕ УСТАНОВКИ
-
-   
-    sockaddr * addr;
-    socklen_t * addr_size;
-
-
-    ServerAddr.sin_family = AF_INET;
-    ServerAddr.sin_addr.s_addr = INADDR_ANY; // раннее было inet_addr(my_ip), таким образом привяжемся к конкретному сетевому интерфейсу. Либо использовать INADDR_ANY, для входящих от всех интерфейсов
-    ServerAddr.sin_port = htons(NETPORT);      // занимаемый порт на моем компьютере
-    listener_socket = socket(AF_INET,SOCK_STREAM, 0); // Семейство Internet, потоковые сокеты, TCP    
-    if (bind(listener_socket, (sockaddr *) &ServerAddr, sizeof(ServerAddr)) < 0)
-    {
-        std::cerr << "Ошибка bind\nПерезапустить через минуту?\n"; // МИНУТА!
-        return 0;;
-    }
-    // для TCP нужно возиться с соединениями (использовать listen() и accept())
-    if(listen(listener_socket, 5) < 0) // создание очереди запросов на соединение. Указывается размер. Блокирует программу (??? походу нет) и ждет подключений
-    {
-        std::cerr << "Ошибка Listen";
-    }
-    char * Receive_Buff = new char[100];    // сетевой приемный буфер
-    */  
-
-
+    // ОСНОВНОЙ ЦИКЛ
     while(true)
     {
         // === переменные необходимые для итерации ===
@@ -108,13 +70,12 @@ int main()
         int32_t PixCoordX = 0;                                      // переменная для хранения координаты X пикселя
         int32_t PixCoordY = 0;                                      // переменная для хранения координаты Y пикселя
 
-        envir_param get_envir_data;
+        RESPONSE_TYPES TypeResponse; // для формирования ответа
 
-        uint8_t Command;   // переменная куда мы положим номер команды, которая пришла
+        envir_param get_envir_data;
 
         // переменная от которой будет зависеть длина ответного пакета
         int32_t Answer_size = 0;
-
 
         SENDPARAM OutputStructData = {0};
         GETTEMPLIM TempLimitStructData = {0};
@@ -122,83 +83,48 @@ int main()
         GETAIRTEMP AirTempStructData = {0};
         GETENVIRPARAMS EnvirParamStructData = {0};
 
-        printf("\n ==== ЖДЕМ КОМАНДУ ОТ РОБОТА ==== \n____________\n\n");
-        NetObject.Receive();
+        printf("\n ==== ЖДЕМ ОЧЕРЕДНУЮ КОМАНДУ ОТ РОБОТА ==== \n____________\n\n");
+        NetObject.Receive(); // ЗДЕСЬ ТЕКУЩИЙ ПОТОК ПОДВИСАЕТ В ОЖИДАНИИ ВХОДЯЩИХ ЗАПРОСОВ   
 
-        /*
-        exchange_socket = accept(listener_socket, (sockaddr *) &ClientAddr, (socklen_t *) &ClientAddrSize); // а вот здесь уже блокируется программа. Извлекает первый запрос из очереди либо если очередь пустая ждет и блокирует программу до первого соединения
-        if(exchange_socket >= 0)
-        {
-            printf("Принят запрос на соединение:\n");
-        }
-        else
-        {
-            printf("Что то не так с сокетом обмена:\n");
-            std::cout << errno;
-            break;
-        }
-        std::string his_ip = "";
-        his_ip = inet_ntoa(ClientAddr.sin_addr);
-        printf("\tIP-адрес подключившегося: %s \n", his_ip.c_str()) ;
-        printf("\tЕго порт: %d\n", ClientAddr.sin_port);
-        std::cout << "\tВремя подключения: " << GetCurrentTimestamp(1) << std::endl;
-        // получение данных из сокета
-        bytes_recv = recv(exchange_socket, Receive_Buff, 100, 0);
-        std::cout << "\tПришло байт: " << bytes_recv << std::endl;
-        std::cout << "\tСостав посылки: \n\t";
-        for(int i=0; i < bytes_recv; i++)
-        {
-            printf("0x%02X, ", Receive_Buff[i]); // отображаем принятые байты
-        }
-        std::cout << std::endl << std::endl;
-        */
-
-
-
-    
-        //std::string currentRequest(Receive_Buff, bytes_recv);
-
-        // берем первый байт чтобы узнать тип запроса
-        Command = NetObject.Receive_Buff[0];
-        printf("Тип запроса: %02X \n", Command);
-
-       
-        std::string RestRequestText(NetObject.Receive_Buff+1, NetObject.bytes_recv-1); // сохраняем оставшуюся часть запроса в виде текста
+        // берем первый байт из буфера приема, чтобы узнать тип запроса
+        // оставшуюся часть запроса сохраняем в виде текста
+        uint8_t TypeRequest = NetObject.Receive_Buff[0];
+        printf("Тип запроса: %02X \n", TypeRequest);
+        std::string RequestText(NetObject.Receive_Buff+1, NetObject.GetRecvBytes()-1); 
         
-
-        switch(Command)
+        switch(TypeRequest)
         {
             case 1: // ФОРМИРОВАНИЕ СНИМКА
                 // сначала формируем имя снимка
-                MakeCapture(CapturePath, RestRequestText, &OutputStructData);
+                MakeCapture(CapturePath, RequestText, &OutputStructData);
                 Answer_size=14;
                 break;   
 
 
             case 2: // ЗАПРОС ТЕМПЕРАТУР
                 RequestTemperatures(&OutputStructData);
-                Answer_size = 14;
+                TypeResponse = TEMPERATURES;
                 break;
 
 
             case 31: // УСТАНОВКА ТЕМПЕРАТУРЫ ОКРУЖАЮЩЕЙ СРЕДЫ
-                if((NetObject.bytes_recv) == sizeof(GETAIRTEMP))
+                if((NetObject.GetRecvBytes()) == sizeof(GETAIRTEMP))
                 {
                     memcpy(&AirTempStructData, NetObject.Receive_Buff, sizeof(AirTempStructData));
                     SetAirTemp(ConfigPath, AirTempStructData.air_temp);
-                    OutputStructData.error = 0x00;
+                    OutputStructData.error = 0x00;   
                 }
                 else
                 {
                     std::cout << "\tНеверный размер структуры. Ответим ошибкой" << std::endl; 
                     OutputStructData.error = 0x06;
                 }
-                Answer_size = 4;
+                TypeResponse = RESULT_OF_COMMAND;
                 break;
 
 
             case 32: // УСТАНОВКА ДИСТАНЦИИ
-                if((NetObject.bytes_recv) == sizeof(GETDISTANCE))
+                if((NetObject.GetRecvBytes()) == sizeof(GETDISTANCE))
                 {
                     memcpy(&DistanceStructData, NetObject.Receive_Buff, sizeof(DistanceStructData));
                     SetDistance(ConfigPath, DistanceStructData.distance);
@@ -209,11 +135,11 @@ int main()
                     std::cout << "\tНеверный размер структуры. Ответим ошибкой" << std::endl; 
                     OutputStructData.error = 0x06;
                 }
-                Answer_size = 4;
+                TypeResponse = RESULT_OF_COMMAND;
                 break;
 
             case 33: // УСТАНОВКА ИЗЛУЧАЕМОСТИ И ВЛАЖНОСТИ
-                if((NetObject.bytes_recv) == sizeof(GETENVIRPARAMS))
+                if((NetObject.GetRecvBytes()) == sizeof(GETENVIRPARAMS))
                 {
                     memcpy(&EnvirParamStructData, NetObject.Receive_Buff, sizeof(EnvirParamStructData));
                     SetEmissivityHumidity(ConfigPath, EnvirParamStructData.emissivity, EnvirParamStructData.humidity);
@@ -224,7 +150,7 @@ int main()
                     std::cout << "\tНеверный размер структуры. Ответим ошибкой" << std::endl; 
                     OutputStructData.error = 0x06;
                 }
-                Answer_size = 4;
+                TypeResponse = RESULT_OF_COMMAND;
                 break;
 
 
@@ -234,29 +160,25 @@ int main()
                 std::memcpy(&PixCoordY, &NetObject.Receive_Buff[5], sizeof(uint32_t));
                 GetTemperaturePixel(CapturePath, PixCoordX, PixCoordY, &OutputStructData);
                 OutputStructData.error = 0x00;
-
-                Answer_size=5;
+                TypeResponse = TEMPERATURE_PIXEL;
                 break;
 
 
             case 5: // ЗАПРОС КАРТЫ ПИКСЕЛЕЙ
                 if(GetMapPixel(CapturePath, response_temp_data) == 0)
                 {
-                    Answer_size=327680;
+                    TypeResponse = MAP;
                     DrawMap(response_temp_data);
                 }
                 else
                 {
-                    Answer_size=4;
+                    TypeResponse = RESULT_OF_COMMAND;
                     OutputStructData.error = 0x05;
                 }
-                
                 break;    
 
-
-
             case 6: // УСТАНОВКА НУЖНЫХ НАМ ТЕМПЕРАТУРНЫХ ПОРОГОВ
-                if((NetObject.bytes_recv) == sizeof(GETTEMPLIM))
+                if((NetObject.GetRecvBytes()) == sizeof(GETTEMPLIM))
                 {
                     memcpy(&TempLimitStructData, NetObject.Receive_Buff, sizeof(TempLimitStructData));
                     SetTemperatureLimit(ConfigPath, TempLimitStructData.min_t, TempLimitStructData.max_t);
@@ -267,7 +189,7 @@ int main()
                     std::cout << "\tНеверный размер структуры. Ответим ошибкой" << std::endl; 
                     OutputStructData.error = 0x06;
                 }
-                Answer_size = 4;
+                TypeResponse = RESULT_OF_COMMAND;
                 break;
 
                 
@@ -317,57 +239,64 @@ int main()
                 break;
 
             default: 
-                std::cout << "Неизвестный тип запроса. Ответ не отправляем" << std::endl;
-                continue;
+                std::cout << "Неизвестный тип запроса" << std::endl;
+                TypeResponse = NONE;
                 break;
         }
 
 
         // ФОРМИРОВАНИЕ ОТВЕТА
-        int result;
-        if(Answer_size==327680)
+        switch(TypeResponse)
         {
-            NetObject.Send(&response_temp_data, Answer_size);
+            case MAP:
+                NetObject.Send(&response_temp_data, 327680);
+                break;
+
+            case TEMPERATURES:
+                NetObject.Send(&OutputStructData, 14);
+                // покажем в консоли что было отправлено
+                //char ArrayStructData[100];  // сюда скопируем байты структуры чтобы вывести в консоли побайтово  
+                //std::memcpy(ArrayStructData, &OutputStructData, 14);
+                //std::cout << "\tСостав ответной посылки: ";
+                //for(int i=0; i < 14; i++)
+                //{
+                //    printf("0x%02X, ", ArrayStructData[i]); // отображаем принятые байты
+                //}
+                break;
+
+            case TEMPERATURES_AND_SIGNAL:
+                NetObject.Send(&OutputStructData, 14);
+                break;
+
+            case RESULT_OF_COMMAND:
+                NetObject.Send(&OutputStructData, 4);
+                break;
+
+            case TEMPERATURE_PIXEL:
+                NetObject.Send(&OutputStructData, 5);
+                break;
+
+            case NONE:
+                std::cout << "Ничего не отправляем обратно" << std::endl;
+                break;
+
+            default:
+                std::cout << "Тип ответа не задан. ERROR." << std::endl;
+                break;
         }
-        else
-        {
-            NetObject.Send(&OutputStructData, Answer_size);
-
-            // покажем в консоли что было отправлено
-            char ArrayStructData[100];  // сюда скопируем байты структуры чтобы вывести в консоли побайтово  
-            std::memcpy(ArrayStructData, &OutputStructData, Answer_size);
-            std::cout << "\tСостав ответной посылки: ";
-            for(int i=0; i < Answer_size; i++)
-            {
-                printf("0x%02X, ", ArrayStructData[i]); // отображаем принятые байты
-            }
-            std::cout << std::endl << std::endl << std::endl;
-        }
-
-      
-        continue;
-
+        
+        continue; // возврат на новую итерацию цикла
     }
 
-    sdk_release(pSdk);
 
-    
+    // конец программы
+    sdk_release(pSdk);
     return 0;
 }
 
 
 /*
-
-        
-
     //sdk_osd_switch(SdkHandle, Device_Info, 1);
-
-    
-    
-    Alarm_Config alarm_config;
-    
-    int vvv = sdk_set_temp_alarm(SdkHandle, Device_Info, 256, alarm_config);
-    std::cout << "vvv=" << vvv << std::endl;
 
     int iUnit;
     sdk_set_temp_unit(SdkHandle, Device_Info, 0);
@@ -375,12 +304,8 @@ int main()
 
     int zapis = sdk_start_record(SdkHandle, Device_Info, "./file222");
     std::cout << "zapis res: " << zapis << std::endl;
-   
-   
 
-   //sdk_osd_switch(pSdk, Device_Info, 1); // включение/отключение OSD
-
-
+    //sdk_osd_switch(pSdk, Device_Info, 1); // включение/отключение OSD
     
     /*Area_pos area1_pos;
     area1_pos.iMode = 2;
@@ -395,20 +320,13 @@ int main()
     sdk_set_area_pos(SdkHandle, Device_Info, 5, area1_pos);
     */
 
-    
-
     //sdk_remove_area_pos(SdkHandle, Device_Info, 6, 2);
 
-
     /*
-
 
     unsigned short port; 
     sdk_get_onvif_port(SdkHandle, Device_Info, &port);
     std::cout << port;
-
-
-
     
     while(true)
     {
@@ -418,10 +336,6 @@ int main()
 
         //int z = sdk_serial_cmd_send(SdkHandle, reinterpret_cast<char*>(sendCmd), length);
         //std::cout << "Результат отправки: " << z << std::endl;
-
-
-        
-
 
         //z = sdk_serial_cmd_receive(SdkHandle, RecieveBuff, &buflen);
         //std::cout << "Результат приема: " << z << std::endl;

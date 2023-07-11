@@ -1,6 +1,7 @@
 /*
     РЕАЛИЗАЦИЯ КЛАССА СЕТЕВОЙ АБСТРАКЦИИ
 */
+
 #include "../headers/Netabstraction.h"
 
 // конструктор
@@ -46,6 +47,13 @@ Netabstraction::~Netabstraction()
 }
 
 
+// методы доступа
+int Netabstraction::GetRecvBytes()
+{
+    return CountBytesRecv;
+}
+
+
 void Netabstraction::Receive()
 {
     ClientSocket = accept(ServerSocket, (sockaddr *) &ClientAddr, (socklen_t *) &ClientAddrSize); // а вот здесь уже блокируется программа. Извлекает первый запрос из очереди либо если очередь пустая ждет и блокирует программу до первого соединения
@@ -58,6 +66,7 @@ void Netabstraction::Receive()
         printf("Что то не так с сокетом обмена:\n");
         std::cout << errno;
     }
+
     std::string ClientIp = "";
     ClientIp = inet_ntoa(ClientAddr.sin_addr);
     printf("\tIP-адрес подключившегося: %s \n", ClientIp.c_str()) ;
@@ -65,9 +74,9 @@ void Netabstraction::Receive()
     //std::cout << "\tВремя подключения: " << GetCurrentTimestamp(1) << std::endl;
     
     // получение данных из сокета обмена данными
-    bytes_recv = recv(ClientSocket, Receive_Buff, 100, 0);
-    std::cout << "\tПришло байт: " << bytes_recv << std::endl << "\tСостав посылки: \n\t";
-    for(int i=0; i < bytes_recv; i++)
+    CountBytesRecv = recv(ClientSocket, Receive_Buff, 100, 0);
+    std::cout << "\tПришло байт: " << CountBytesRecv << std::endl << "\tСостав посылки: \n\t";
+    for(int i=0; i < CountBytesRecv; i++)
     {
         printf("0x%02X, ", Receive_Buff[i]); // отображаем принятые байты
     }
