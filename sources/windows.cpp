@@ -6,8 +6,16 @@
 
 extern std::vector<unsigned short> _temp_data;
 
+extern "C"
+{
+    #include <libavcodec/avcodec.h>
+    #include <libavformat/avformat.h>
+    #include <libswscale/swscale.h>
+}
 
 
+
+// === ПАЛИТРА С ИНТЕРНЕТА ===
 typedef struct {
     double r,g,b;
 } COLOUR;
@@ -39,6 +47,7 @@ COLOUR GetColour(double v,double vmin,double vmax)
 
    return(c);
 }
+// === ===
 
 
 
@@ -71,6 +80,7 @@ void DrawAnotherMethodColors(sf::VertexArray &Map)
 
     std::cout << "tmax = " << tmax << std::endl;
     std::cout << "tmin = " << tmin << std::endl;
+    printf("Возврат AV: %d \n", avcodec_version());
 
     int dv = tmax - tmin;
     COLOUR mycolor;
@@ -133,6 +143,8 @@ void DrawAnotherMethodColors(sf::VertexArray &Map)
     */
 
 }
+
+
 
 
 void DrawChubkoColors(sf::VertexArray &Map)
@@ -258,17 +270,10 @@ void * WindowThread(void * args)
     view_window.create(sf::VideoMode(580, 600), "View Window");
 
     sf::VertexArray ThermalMap(sf::Points, 327680);
-    
-
-    
-
-    
 
     while(view_window.isOpen())
     {
         sf::Event event;
-
-        
 
         while(view_window.pollEvent(event))
         {
@@ -279,17 +284,16 @@ void * WindowThread(void * args)
             {
                 std::cout << "Нажата: " << event.key.code << std::endl;
                
+                
                 //DrawChubkoColors(ThermalMap);
                 DrawAnotherMethodColors(ThermalMap);
+                
 
                 view_window.clear(sf::Color::Black); // отрисовка в скрытый буфер
                 view_window.draw(ThermalMap);
                 view_window.display();
             }
         }
-
-        
-
         //sleep(0.5);
     }
 }
@@ -384,3 +388,8 @@ void DrawMap(std::array<uint8_t, 327680> data)
     sleep(15);
 
 }
+
+
+
+
+

@@ -4,31 +4,56 @@
 #include <cstring>
 #include <unistd.h>
 
-extern char curCapName[50];
+unsigned char* video_data;
+unsigned short * videoData;
+//extern char curCapName[50];
 
 std::vector<unsigned short> _temp_data(640 * 512); // для температурной матрицы
+void DrawVideoFrame(unsigned char * h264_input_buff, long len);
+
 
 int _width = 384;       // ???
 int _height = 288;      // ???
 
+//short * videodata = new short(1000)
+
 // ФУНКЦИЯ-ОБРАБОТЧИК ПРИХОДА ВИДЕОКАДРА
 void VideoCallBackMy(char *pBuffer, long BufferLen, int width, int height, void* pContext)
 {
+    //video_data = new unsigned char[BufferLen];
+    //memcpy(&video_data[0], pBuffer, BufferLen);
+
+    videoData = new unsigned short (500000); // для обращения в нужный порядок байт
+    memcpy(videoData, pBuffer, BufferLen);
+
     std::cout << "Пришло байт(видеокадр): " << BufferLen << std::endl;
-    short videoData[124061];   //1280*1024*1.5 данные изображения
+
+
+    //DrawVideoFrame(video_data, BufferLen);
+    
+
+    //
+    //unsigned char ** outbuff2 = new unsigned char (400000);
+    
+
+
+
+    //unsigned short videoData[50000];   //1280*1024*1.5 данные изображения
     //_width = width;
     //_height = height;
-    //memcpy(videoData, pBuffer, width*height *1.5);
+    //memcpy(videoData, pBuffer, BufferLen);
 
     //std::cout << "VideoCallBackReceive: _width=" << _width << std::endl;
 
 
     //Пример отображения 100 предварительных данных
-    //for (int i = 0; i < 100; i++)
-    //    std::cout << videoData[i] << ",";
+    for (int i = 0; i < 50; i++)
+        printf("%04X, ", videoData[i]);
 
     std::cout << std::endl;
-
+    
+    //delete video_data;
+    delete videoData;
 }
 
 
@@ -68,8 +93,8 @@ void TempCallBackMy(char *pBuffer, long BufferLen, void* pContext)
         //celsius_point = ((_temp_data[i]+ 7000)/30) - 273.2;
         //std::cout << celsius_point << std::endl;
     }
-    std::cout << "Global MIN: " << min << std::endl;
-    std::cout << "Global MAX: " << max << std::endl;
+    //std::cout << "Global MIN: " << min << std::endl;
+    //std::cout << "Global MAX: " << max << std::endl;
 }
 
 

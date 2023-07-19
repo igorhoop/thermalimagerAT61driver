@@ -7,6 +7,7 @@
 #include "../headers/Netabstraction.h"
 
 
+
 bool SDK_INIT = false;
 
 int32_t SettedTmax = 0;         // максимальный порог температуры для срабатывания сигнала
@@ -55,9 +56,9 @@ int main()
 
 
     // Старт потока для работы с окном
-    //pthread_t window_thread;
-    //int result_window_thread;
-    //result_window_thread = pthread_create(&window_thread, NULL, &WindowThread, NULL);
+    pthread_t window_thread;
+    int result_window_thread;
+    result_window_thread = pthread_create(&window_thread, NULL, &WindowThread, NULL);
 
     // создаем абстракционный сетевой объект
     Netabstraction NetObject(30001);
@@ -154,7 +155,6 @@ int main()
                 break;
 
 
-
             case 4: // ЗАПРОС ТЕМПЕРАТУРЫ ПИКСЕЛЯ
                 std::memcpy(&PixCoordX, &NetObject.Receive_Buff[1], sizeof(uint32_t));
                 std::memcpy(&PixCoordY, &NetObject.Receive_Buff[5], sizeof(uint32_t));
@@ -168,7 +168,7 @@ int main()
                 if(GetMapPixel(CapturePath, response_temp_data) == 0)
                 {
                     TypeResponse = MAP;
-                    DrawMap(response_temp_data);
+                    //DrawMap(response_temp_data);
                 }
                 else
                 {

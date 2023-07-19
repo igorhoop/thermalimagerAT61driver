@@ -67,7 +67,7 @@ int GetMapPixel(std::string capture_path, std::array<uint8_t, 327680> &response_
         sdk_get_irg_data( (char *) FullPath.c_str(), 4, temp_data, image_data);
 
         
-        for(int i=0; i < 327630; i++)
+        for(int i=0; i < 327680; i++)
         {
             response_temp_data[i] = temp_data[i]/10 - 273.2;
         }
@@ -473,8 +473,6 @@ int DeviceConnect()
         return 1;
     }
 }
-
-
 
 
 

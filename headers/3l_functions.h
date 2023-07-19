@@ -31,10 +31,15 @@ int PortOpen();
 // threads
 void * PingDeviceThread(void * args);
 void * WindowThread(void * args);
+void * WindowVideoThread(void * args);
+
 
 
 // windows
 void DrawMap(std::array<uint8_t, 327680> data);
+int FFmpeg_H264Decode(unsigned char * inbuf, int inbufSize, unsigned char *outRGBBuf);
+
+
 
 // callbacks
 void TempCallBackMy(char *pBuffer, long BufferLen, void* pContext);
