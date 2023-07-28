@@ -462,7 +462,7 @@ int DeviceConnect()
         int res = SetSerialCallBack(pSdk, Device_Info, SerialCallBackMy, NULL);   // установка обработчика приема серийных данных
         res = SetTempCallBack(pSdk, TempCallBackMy, NULL);
         std::cout << "\tУстановка функций обработчиков (серийные данные): " << res << std::endl;
-        //res = SetDeviceVideoCallBack(pSdk, VideoCallBackMy, NULL);
+        res = SetDeviceVideoCallBack(pSdk, VideoCallBackMy, NULL);
         //std::cout << "\tУстановка функций обработчиков (видео данные): " << res << std::endl;
 
         return 0;

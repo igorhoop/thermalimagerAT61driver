@@ -58,7 +58,7 @@ int main()
     // Старт потока для работы с окном
     pthread_t window_thread;
     int result_window_thread;
-    result_window_thread = pthread_create(&window_thread, NULL, &WindowThread, NULL);
+    result_window_thread = pthread_create(&window_thread, NULL, &WindowVideoThread, NULL);
 
     // создаем абстракционный сетевой объект
     Netabstraction NetObject(30001);

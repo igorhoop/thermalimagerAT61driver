@@ -42,3 +42,13 @@ rtsp:///...554/user=admin&password=secret&channel=1&stream=0 # источник,
 Стрим по RTMP
 
 
+Стрим на ютуб
+ffmpeg -loop 1 -i Melodic_Team_Logo.jpg -i melodic\ team\ -\ gorod.mp3 -f flv rtmp://a.rtmp.youtube.com/live2/507t-0br4-d3sd-dmqw-93hq
+# или так
+ffmpeg -i ./Курс\ Льва/1.mp4 -f flv rtmp://a.rtmp.youtube.com/live2/507t-0br4-d3sd-dmqw-93hq
+
+
+Скопировать дохуя раз файл
+ffmpeg -stream_loop -1 -i 11.mp3 -c copy "myrepeat.mp3"
+
+
