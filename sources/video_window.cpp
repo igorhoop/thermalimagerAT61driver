@@ -1,94 +1,144 @@
-#include <SFML/Graphics.hpp> // SFML
+#include <SFML/Graphics.hpp>
 #include <unistd.h>
 #include <iostream>
 #include <vector>
-
-#include <mutex>
 
 extern "C"
 {
     #include <libavcodec/avcodec.h>
     #include <libavformat/avformat.h>
     #include <libswscale/swscale.h>
+    #include <libavutil/imgutils.h>
 }
 
 
 
-
-struct AVCodecContext *pAVCodecCtx_decoder = NULL;
-struct AVPacket mAVPacket_decoder;
-struct AVFrame *pAVFrame_decoder = NULL;
-struct SwsContext* pImageConvertCtx_decoder = NULL;
-struct AVFrame *pFrameYUV_decoder = NULL;
+uint8_t *dst_data[4];
+int dst_linesize[4];
 
 
 // мои объекты ffmpeg
-AVCodecContext *pCodecContext = NULL;
-AVPacket pPacket;
+AVPacket * pPacket;
 AVFrame *pFrame = NULL;
 
-AVCodec *pAVCodec = NULL;
-AVCodecParameters *pCodecParameters = NULL;
+AVPacket * pSparePacket;
+
+struct SwsContext *pResizeContext;
+AVFrame *pFrame2 = NULL; // сюда будем класть данные после scale
 
 
-// инициализация всего что нужно для декодирования
-int DecoderInit()
+
+AVCodecContext *pCodecContext = NULL;       // указатель на контекст кодека (основная структура кодека)
+//AVCodecParameters *pCodecParameters = NULL; // указатель на объект, описывающий свойства закодированного потока
+
+
+// ПОДГОТОВКА ДЕКОДЕРА ДЛЯ H264, ВСЕ ЧТО ОТНОСИТСЯ К FFMPEG
+int VideoDecoderInit()
 {
-    avcodec_register_all(); // этой функции нет в документации, но без нее кодек не ищется
+    avcodec_register_all(); // Регистрируем все существующие кодеки. Этой функции нет в документации, но без нее кодек не ищется
 
-    // сначала определяемся с кодеком (в данном случае ищем декодер на h264)
+    AVCodec *pAVCodec = NULL; // указатель на объект-кодек. Он нужен только чтобы заполнить соответствующий член структуры контекста кодека.
+                              // Поэтому объявлен локально в функции, а не глобально
+    // определяемся с кодеком (в данном случае ищем декодер на h264). Получаем объект-кодек
     pAVCodec = avcodec_find_decoder_by_name("h264");
-    if(!pAVCodec)
+    if(pAVCodec == NULL)
     {
-        std::cout << "кодек не найден" << std::endl;
+        std::cout << "Кодек не найден" << std::endl;
+        exit(1);
+    }    
+
+    // заполняем КОНТЕКСТ КОДЕКА основываясь на объекте-кодеке
+    pCodecContext = avcodec_alloc_context3(pAVCodec); // Это глобальный объект, который потребуется для декодирования.
+    if(pCodecContext == NULL)
+    {
+        std::cout << "Не получилось выделить место под контекст кодека" << std::endl;
         exit(1);
     }
 
+    std::cout << "ЧИТАЕМ ИНФУ ИЗ КОНТЕКСТА КОДЕКА: " << pCodecContext->codec->name << std::endl;
+    std::cout << "размер: " << sizeof(AVCodec) << std::endl;
+    
 
-    // потом создаем контекст кодека и заполняем его на основе структуры AVCodec
-    pCodecContext = avcodec_alloc_context3(pAVCodec); // это основная глобальная структура для работы кодека. выделяем место и заполняем поля
-    if(!pCodecContext)
-    {
-        std::cout << "не получилось выделить место под контекст кодека" << std::endl;
-        exit(1);
-    }
-
-
-    // зачем то создаем структуру ACCodecParameters и заполняем ее на базе контекста кодека
-    pCodecParameters = avcodec_parameters_alloc();
-    int result = avcodec_parameters_from_context(pCodecParameters, pCodecContext);
-    if(result < 0)
-    {
-        std::cout << "не получилось заполнить структуру AVCodecParameters на базе контекста кодека" << std::endl;
-        exit(1);
-    }
-
-    // зачем то копируем параметры кодека в контекст кодека
-    result = avcodec_parameters_to_context(pCodecContext, pCodecParameters);
-    if(result < 0)
-    {
-        std::cout << "не получилось скопировать параметры кодека в контекст кодека" << std::endl;
-        exit(1);
-    }
-
-
-    // открыть кодек
+    // ВАЖНЫЙ ШАГ. Открываем интерфейс для взаимодействия с кодеком (взаимодействие будет через экземпляр контекста кодека)
     avcodec_open2(pCodecContext, pAVCodec, NULL);
+        
 
     // зачем то нужно произвести инициализацию пакета. Этой функции тоже нет в документации. СЕГФОЛТ, сначала нужно alloc
-    av_init_packet(&pPacket); 
+    //av_init_packet(&pPacket); // она же устарела
+
+    pPacket = av_packet_alloc();
+    pSparePacket = av_packet_alloc();
 
     pFrame = av_frame_alloc();
 
 
-    std::cout << "УСПЕШНАЯ ИНИЦИАЛИЗАЦИЯ" << std::endl;
+    //std::cout << "из пакета: " << pPacket->size << std::endl;
+
+    //exit(1);
+
+
+    int src_w = 640, src_h = 512; // исходные размеры кадра
+    int dst_w = 640, dst_h = 512; // целевые размеры кадра
+
+    enum AVPixelFormat src_pix_fmt = AV_PIX_FMT_YUV420P; // тот самый формат который я понял
+    enum AVPixelFormat dst_pix_fmt = AV_PIX_FMT_RGB24;   // с этим форматом пока неясно
+    
+    pResizeContext = sws_getContext(src_w, src_h, src_pix_fmt, dst_w, dst_h, dst_pix_fmt, SWS_BILINEAR, NULL, NULL, NULL);
+
+
+
+    if ((av_image_alloc(dst_data, dst_linesize, dst_w, dst_h, dst_pix_fmt, 1)) < 0)
+    {
+            fprintf(stderr, "Could not allocate destination image\n");
+            exit(1);
+    }
+
+
+    return 0;
+}
+
+
+    
+int DecodeH264(uint8_t *inbuf, int inbufSize)
+{
+    if(pCodecContext == NULL || pFrame == NULL || inbufSize <= 0)
+    {
+        std::cout << "Не получилось декодировать, т.к. отсутствуют нужные объекты" << std::endl;
+        return 1;
+    }
+
+    pPacket->data = inbuf;
+    pPacket->size = inbufSize;
+
+    if(pPacket->buf == NULL)
+        std::cout << "NUUUUUUUUUUUUUUUUL" << std::endl;
+
+    av_packet_ref(pSparePacket, pPacket);
+    av_packet_unref(pPacket);
+
+    int result = avcodec_send_packet(pCodecContext, pSparePacket);
+    
+    std::cout << "что то из запасного пакета: " << pSparePacket->size << std::endl;
+    std::cout << "результат отправки пакета: " << result << std::endl;
+
+    if(result == 0)
+    {
+        result = avcodec_receive_frame(pCodecContext, pFrame);
+        std::cout << "расшифровываем кадр: " << std::endl;
+        std::cout << "его ширина: " << pFrame->linesize[0] << std::endl;
+
+        int height_output = sws_scale(pResizeContext, (const uint8_t * const*) pFrame->data, pFrame->linesize, 0, 512, dst_data, dst_linesize);
+
+        std::cout << "высота output: " << height_output << std::endl;
+    }
+        
     return 0;
 }
 
 
 
 
-
+// ФУНКЦИЯ ОТРИСОВКИ БУФЕРОВ С КАДРОМ 512x640
 int DrawVideoFrame(sf::VertexArray &VideoFrame, uint8_t *buff_component_1, uint8_t *buff_component_2, uint8_t *buff_component_3, int lensize)
 {
     sf::Color CurrentColor(0,0,0);
@@ -101,16 +151,17 @@ int DrawVideoFrame(sf::VertexArray &VideoFrame, uint8_t *buff_component_1, uint8
     }
     
     
-    printf("Колво: %d\n", lensize);
-    //printf("Данные: %d\n", buf[50034]);
+    //printf("Колво: %d\n", lensize);
 
     int x=0, y=0;
-    for(int i = 0; i < 327680; i++)
+    for(int i = 0, j = 0; i < 2073600 && j < 327680; i+=3, j++)
     {
         CurrentColor.r = buff_component_1[i];
-        VideoFrame[i].color = CurrentColor;
-        
-        VideoFrame[i].position = sf::Vector2f(x,y);
+        CurrentColor.g = buff_component_1[i+1];
+        CurrentColor.b = buff_component_1[i+2];
+
+        VideoFrame[j].color = CurrentColor;
+        VideoFrame[j].position = sf::Vector2f(x,y);
         x++;
         if(x > 639)
         {
@@ -119,100 +170,55 @@ int DrawVideoFrame(sf::VertexArray &VideoFrame, uint8_t *buff_component_1, uint8
         }
     }
 }
-
-
-uint8_t YUVOUT_Y[328000];
-uint8_t YUVOUT_U[328000];
-uint8_t YUVOUT_V[328000];
-
-
-    
-int DecodeH264(uint8_t *inbuf, int inbufSize)
-{
-    //std::cout << "Начало функции декодирования" << std::endl;
-    if(pCodecContext == NULL || pFrame == NULL || inbufSize <= 0)
-    {
-        std::cout << "Не получилось декодировать, т.к. отсутствуют нужные объекты" << std::endl;
-        return 1;
-    }
-    
-    pPacket.data = inbuf;
-    pPacket.size = inbufSize;
-
-    int result = avcodec_send_packet(pCodecContext, &pPacket);
-    std::cout << "результат отправки пакета: " << result << std::endl;
-
-    if(result == 0)
-    {
-        result = avcodec_receive_frame(pCodecContext, pFrame);
-        std::cout << "расшифровываем кадр: " << std::endl;
-        std::cout << "его ширина: " << pFrame->linesize[0] << std::endl;
-        //uint8_t * Y_buffer = pFrame->data[0];
-
-        //memcpy(YUVOUT_Y, pFrame->data[0], pFrame->linesize[0]);
-
-        
-
-
-    }
-        
-    return 0;
-}
-
-extern uint8_t * videoData;;
-extern int flag_live_buffer;
-extern int videoDataSize;
+ 
 
 
 
-// ПОТОК ОКНА
+
+// ПОТОЧНАЯ ФУНКЦИЯ, РИСУЮЩАЯ ОКНО И ОТОБРАЖАЮЩАЯ ВИДЕО
 void * WindowVideoThread(void * args)
 {
-    sf::RenderWindow view_window;
-    view_window.create(sf::VideoMode(580, 600), "VIDEO Window");
+    sf::RenderWindow Stream_Window;     // объект окна
+    int Win_Width = 640;                // ширина окна
+    int Win_Height = 512;               // высота окна
 
-    sf::VertexArray ThermalMap(sf::Points, 327680);
-
+    sf::VertexArray ThermalFrame(sf::Points, Win_Width * Win_Height); // массив вертексов
     
-    while(view_window.isOpen())
+    Stream_Window.create(sf::VideoMode(Win_Width, Win_Height), "3Logic Thermal Stream");  // создание окна требуемого размера и с указанным заголовком
+    Stream_Window.setPosition(sf::Vector2i(1250,30));                                     // положение окна
+
+    VideoDecoderInit();
+        
+    while(Stream_Window.isOpen())
     {
         sf::Event event;
 
-        while(view_window.pollEvent(event))
+        while(Stream_Window.pollEvent(event))
         {
             if(event.type == sf::Event::Closed)
-                view_window.close();
+                Stream_Window.close();
             
             if(event.type == sf::Event::KeyPressed)
             {
+                // событие нажатие на клавишу
                 std::cout << "Нажата: " << event.key.code << std::endl;
-                std::cout << "флаг существования буфера: " << flag_live_buffer << std::endl;
-                
-                DecoderInit();
-                
-
+     
                 //av_packet_free(pPacket);
                 //av_packet_unref(&pPacket);
 
                 //av_frame_free(&pFrame);
-
-                
             }
         }
 
 
         if(pFrame != NULL)
         {
-            //struct SwsContent *resize;
-            //resize = sws_getContext(width1, height1, AV_PIX_FMT_YUV420P, width2, height2, PIX_FMT_RGB24, SWS_BICUBIC, NULL, NULL, NULL);
-            DrawVideoFrame(ThermalMap, pFrame->data[0], pFrame->data[1], pFrame->data[2], pFrame->linesize[0]);
+            DrawVideoFrame(ThermalFrame, dst_data[0], pFrame->data[1], pFrame->data[2], dst_linesize[0]/3);
         }
 
-
-
-        view_window.clear(sf::Color::Black); // отрисовка в скрытый буфер
-        view_window.draw(ThermalMap);
-        view_window.display();
+        Stream_Window.clear(sf::Color::Black); // отрисовка в скрытый буфер
+        Stream_Window.draw(ThermalFrame);
+        Stream_Window.display();
     }
 }
 

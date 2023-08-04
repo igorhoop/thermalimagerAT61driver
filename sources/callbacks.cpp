@@ -4,37 +4,23 @@
 #include <cstring>
 #include <unistd.h>
 
-#include <mutex>
-std::mutex mutex;
-
 
 
 
 std::vector<unsigned short> _temp_data(640 * 512); // для температурной матрицы
 int DecodeH264(uint8_t *inbuf, int inbufSize);
 
-int flag_live_buffer;
-
-int _width = 384;       // ???
-int _height = 288;      // ???
-
-//short * videodata = new short(1000)
 
 // ФУНКЦИЯ-ОБРАБОТЧИК ПРИХОДА ВИДЕОКАДРА
 void VideoCallBackMy(char *pBuffer, long BufferLen, int width, int height, void* pContext)
 {
-    //video_data = new unsigned char[BufferLen];
-    //memcpy(&video_data[0], pBuffer, BufferLen);
-
     uint8_t * videoData;
     int videoDataSize;
     
     videoDataSize = 0;
 
     videoData = new uint8_t [500000]; // для обращения в нужный порядок байт
-    flag_live_buffer = 1;
     
-    //std::lock_guard<std::mutex> lock(mutex);
 
     memcpy(videoData, pBuffer, BufferLen);
     videoDataSize = BufferLen;
@@ -43,42 +29,8 @@ void VideoCallBackMy(char *pBuffer, long BufferLen, int width, int height, void*
 
     //std::cout << "Вызываем функцию декодирования" << std::endl;
     DecodeH264(videoData, videoDataSize);
-
-
-    //sleep(1);
-
-    
-    
-    //DrawVideoFrame(video_data, BufferLen);
-    
-
-    //
-    //unsigned char ** outbuff2 = new unsigned char (400000);
-    
-
-
-
-    //unsigned short videoData[50000];   //1280*1024*1.5 данные изображения
-    //_width = width;
-    //_height = height;
-    //memcpy(videoData, pBuffer, BufferLen);
-
-    //std::cout << "VideoCallBackReceive: _width=" << _width << std::endl;
-
-
-    //Пример отображения 100 предварительных данных
-    //for (int i = 0; i < 50; i++)
-    //    printf("%04X, ", videoData[i]);
-
-    //std::cout << std::endl;
-    
-    //delete video_data;
-    //flag_live_buffer = 0;
-
     
     delete [] videoData;
-
-    //std::cout << "Все, данные удалились" << std::endl;
     
 }
 

@@ -49,7 +49,7 @@ int main()
         std::cout << "Путь для сохранения снимков:" << CapturePath <<  std::endl;
     }
  
-    // Старт контролирующего соединение потока
+    // Старт потока, контролирующего соединение с тепловизором
     pthread_t thread;
     int result_thread;
     result_thread = pthread_create(&thread, NULL, &PingDeviceThread, NULL);
