@@ -3,7 +3,7 @@
 
 LFLAG = -Wl,--no-as-needed
 INCLUDE = -I/home/hoop/MY_PROG_PROJECTS/AT61F/development/include
-LIBS = -L/home/hoop/MY_PROG_PROJECTS/AT61F/development/lib -lInfraredTempSDK -lIRNetClient -lhyvstream -ljson_linux-gcc-5.4.0_libmt -lcurl -ltiff -llzma -ldl -lsfml-graphics -lsfml-window -lsfml-system -lsfml-audio -lavcodec -lswscale
+LIBS = -L/home/hoop/MY_PROG_PROJECTS/AT61F/development/lib -lInfraredTempSDK -lIRNetClient -lhyvstream -ljson_linux-gcc-5.4.0_libmt -lcurl -ltiff -llzma -ldl -lsfml-graphics -lsfml-window -lsfml-system -lsfml-audio -lavcodec -lswscale -lavformat
 
 
 

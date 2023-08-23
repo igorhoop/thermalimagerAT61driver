@@ -98,6 +98,138 @@ int VideoDecoderInit()
 }
 
 
+AVFormatContext *output_format_context = NULL;   // контекст контейнера ВЫХОДНОГО
+
+int SAVEFILE_FLAG = 0;
+
+int RecordInit()
+{
+    std::cout << "Для инициализации FFMPEG" << std::endl;
+    int res; // вспомогательная
+
+    const char * sample_name = "molodym_sample.mp4"; // сэмпл чтобы взять инфу о кодеке
+    const char * out_filename = "teplo_video.mp4";      // имя выходного файла
+    
+    AVFormatContext *pInputFormatContext;            // контекст контейнера ВХОДНОГО
+    pInputFormatContext = avformat_alloc_context();  // выделить память под контекст контейнера
+
+    // STEP 1    
+
+    res = avformat_open_input(&pInputFormatContext, sample_name, NULL, NULL);
+     if(res!=0)
+    {
+        std::cout << "Файл сэмпла не найден" << std::endl;
+        return 0;
+    }
+    std::cout << "ТОЛЬКО ОТКРЫЛИ ВХОДНОЙ СЭМПЛ ФАЙЛ, ПОСМОТРИМ ЧТО СЕЙЧАС ИМЕЕМ В КОНТЕКСТЕ:" << std::endl;
+    av_dump_format(pInputFormatContext, 0, sample_name, 0);
+
+    //exit(1);
+
+    
+    avformat_alloc_output_context2(&output_format_context, NULL, NULL, out_filename);
+
+    // ищем видеопоток, чтобы узнать его параметры кодека
+    int i = 0;
+    for(i = 0; i < pInputFormatContext->nb_streams; i++)
+    {
+        AVStream *in_stream = pInputFormatContext->streams[i];
+        AVCodecParameters * in_codecpar = in_stream->codecpar;
+        if(in_codecpar->codec_type != AVMEDIA_TYPE_VIDEO)
+        {
+            continue;
+        }
+
+        if(in_codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
+        {
+            break;
+        }
+
+    }
+
+    std::cout << "Индекс видеопотока: " << i << std::endl;
+
+ 
+    AVStream *out_stream;
+    out_stream = avformat_new_stream(output_format_context, NULL);
+
+   
+    std::cout << "Копируем данные видеокодека из сэмпл файла в наш новый поток в новом формат-контесте." << std::endl;
+    
+    /*
+    res = avcodec_parameters_copy(out_stream->codecpar, pInputFormatContext->streams[i]->codecpar);
+    if (res < 0)
+    {
+        fprintf(stderr, "Failed to copy codec parameters\n");
+        exit(1);
+    }
+    */
+    
+
+    std::cout << "Проверяем заполненность нового формат-контекста" << std::endl;
+
+     
+
+    // небольшие корректировочки
+    out_stream->codecpar->width = 640;
+    out_stream->codecpar->height = 512;
+
+
+    std::cout << "codec_id: " << out_stream->codecpar->codec_id << std::endl;
+    //std::cout << "codec_type: " << out_stream->codecpar->codec_type << std::endl;
+    std::cout << "codec_tag: " << out_stream->codecpar->codec_tag << std::endl;
+    std::cout << "height: " << out_stream->codecpar->height << std::endl;
+    std::cout << "width: " << out_stream->codecpar->width << std::endl;
+    std::cout << "format: " << out_stream->codecpar->format << std::endl;
+
+    out_stream->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
+    out_stream->codecpar->codec_id = AV_CODEC_ID_H264;
+    //std::cout << "codec_type: " << out_stream->codecpar->codec_type << std::endl;
+    out_stream->codecpar->codec_tag = 828601953;
+    out_stream->codecpar->width = 640;
+    out_stream->codecpar->height = 512;
+    out_stream->codecpar->format = -1;
+
+
+
+    //av_dump_format(output_format_context, 0, out_filename, 1);
+
+
+    if (!(output_format_context->oformat->flags & AVFMT_NOFILE))
+        {
+            res = avio_open(&output_format_context->pb, out_filename, AVIO_FLAG_WRITE);
+            if (res < 0) {
+            fprintf(stderr, "Could not open output file '%s'", out_filename);
+            exit(1);
+            }
+        }
+
+
+
+    AVDictionary* opts = NULL;
+
+    
+
+    res = avformat_write_header(output_format_context, &opts);
+    if (res < 0)
+    {
+        fprintf(stderr, "Error occurred when opening output file\n");
+        exit(1);
+    }
+
+
+    SAVEFILE_FLAG = 1;
+    //exit(1);
+
+}
+
+
+
+int global_pts = 1;
+int global_dts = 0;
+int record_counter = 0;
+
+extern long GlobalRecieveByteValue;
     
 int DecodeH264(uint8_t *inbuf, int inbufSize)
 {
@@ -107,6 +239,7 @@ int DecodeH264(uint8_t *inbuf, int inbufSize)
         return 1;
     }
 
+    
     pPacket->data = inbuf;
     pPacket->size = inbufSize;
 
@@ -114,7 +247,35 @@ int DecodeH264(uint8_t *inbuf, int inbufSize)
         std::cout << "NUUUUUUUUUUUUUUUUL" << std::endl;
 
     av_packet_ref(pSparePacket, pPacket);
+    
+    
+
+
+    if(SAVEFILE_FLAG == 1)
+    {     
+        global_pts += 4300;
+        global_dts += 4300;
+
+        pPacket->pts = global_pts;
+        pPacket->dts = global_dts;
+        pPacket->duration = 1000;
+        //pPacket->pos = -1;
+        pPacket->stream_index = 0;
+
+        int res = av_interleaved_write_frame(output_format_context, pPacket);
+        if (res < 0)
+        {
+            fprintf(stderr, "Error muxing packettzzz\n");
+            exit(1);
+        }   
+           
+    }
+
     av_packet_unref(pPacket);
+  
+    
+    
+
 
     int result = avcodec_send_packet(pCodecContext, pSparePacket);
     
@@ -131,6 +292,9 @@ int DecodeH264(uint8_t *inbuf, int inbufSize)
 
         std::cout << "высота output: " << height_output << std::endl;
     }
+
+    
+    
         
     return 0;
 }
@@ -187,6 +351,10 @@ void * WindowVideoThread(void * args)
     Stream_Window.create(sf::VideoMode(Win_Width, Win_Height), "3Logic Thermal Stream");  // создание окна требуемого размера и с указанным заголовком
     Stream_Window.setPosition(sf::Vector2i(1250,30));                                     // положение окна
 
+
+    
+
+
     VideoDecoderInit();
         
     while(Stream_Window.isOpen())
@@ -202,7 +370,26 @@ void * WindowVideoThread(void * args)
             {
                 // событие нажатие на клавишу
                 std::cout << "Нажата: " << event.key.code << std::endl;
-     
+                
+            if(event.key.code == 18)
+            {
+                std::cout << "ВКЛЮЧАЕМ ЗАПИСЬ" << std::endl;
+                std::cout << "Кол-во байт перед записью: " << GlobalRecieveByteValue << std::endl;
+                RecordInit();
+            }
+
+
+
+            if(event.key.code == 10)
+            {
+                std::cout << "ОСТАНОВКА ЗАПИСИ" << std::endl;
+                SAVEFILE_FLAG=0;
+                std::cout << "Записываем трейлер" << std::endl;
+                std::cout << "Кол-во байт после записи: " << GlobalRecieveByteValue << std::endl;
+                av_write_trailer(output_format_context);
+                avio_closep(&output_format_context->pb);
+                
+            }
                 //av_packet_free(pPacket);
                 //av_packet_unref(&pPacket);
 
@@ -214,6 +401,8 @@ void * WindowVideoThread(void * args)
         if(pFrame != NULL)
         {
             DrawVideoFrame(ThermalFrame, dst_data[0], pFrame->data[1], pFrame->data[2], dst_linesize[0]/3);
+
+
         }
 
         Stream_Window.clear(sf::Color::Black); // отрисовка в скрытый буфер
