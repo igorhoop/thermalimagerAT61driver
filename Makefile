@@ -15,7 +15,7 @@ compile: objectfiles
 # получение объектного модуля из исходного кода. Получается ELF-файл типа "перемещаемый". Выполнить его пока нельзя, далее нужно его передать компоновщику 
 
 objectfiles: ./sources/main.cpp ./sources/thematic.cpp ./sources/callbacks.cpp ./sources/basis.cpp ./sources/Netabstraction.cpp ./sources/thermalmap_window.cpp ./sources/video_window.cpp
-	g++ -std=c++17 -g -c -DSYS_LINUX ./sources/main.cpp
+	g++ -std=c++17 -g -c -DSYS_LINUX  ./sources/main.cpp
 	g++ -g -c -DSYS_LINUX ./sources/thematic.cpp
 	g++ -g -c -DSYS_LINUX ./sources/callbacks.cpp
 	g++ -c ./sources/basis.cpp

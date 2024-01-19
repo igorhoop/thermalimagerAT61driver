@@ -1,6 +1,8 @@
 Задание переменных среды
 export AT61F_CAPTURE_PATH=/home/hoop/MY_PROG_PROJECTS/AT61F/development/photos/
+export AT61F_VIDEO_PATH=/home/hoop/MY_PROG_PROJECTS/AT61F/development/videos/
 export AT61F_CONFIG_PATH=/home/hoop/MY_PROG_PROJECTS/AT61F/development/config/config
+
 
 
 Программа ищет файл конфигурации по пути:

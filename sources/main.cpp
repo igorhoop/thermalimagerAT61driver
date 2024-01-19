@@ -25,9 +25,15 @@ struct ChannelInfo Device_Info;   // структура с информацие�
 int main()
 {
     std::string CapturePath;    // путь к снимкам, который требуется взять из переменной среды
+    std::string VideoPath;    // путь к видео, который требуется взять из переменной среды
     std::string ConfigPath;     // путь к конфигурационному файлу, который требуется взять из переменной среды
+    std::string LogPath;        // путь к лог-файлу
     
     std::cout << "Старт модуля взаимодействия с тепловизором AT61F (Infiray)." << std::endl;
+
+
+
+
 
 
     // чтение переменных среды
@@ -52,6 +58,28 @@ int main()
         CapturePath = getenv("AT61F_CAPTURE_PATH");
         std::cout << "Путь для сохранения снимков:" << CapturePath <<  std::endl;
     }
+    if(getenv("AT61F_VIDEO_PATH")==NULL)
+    {
+        std::cout << "Не задана переменная среды с путем сохранения видео. Завершение работы" << std::endl;
+        exit(1);
+    }
+    else
+    {
+        VideoPath = getenv("AT61F_VIDEO_PATH");
+        std::cout << "Путь для сохранения видео:" << VideoPath <<  std::endl;
+    }
+
+    if(getenv("AT61F_LOG_PATH")==NULL)
+    {
+        std::cout << "Не задана переменная среды с путем для лог-файла. Завершение работы" << std::endl;
+        exit(1);
+    }
+    else
+    {
+        LogPath = getenv("AT61F_LOG_PATH");
+        std::cout << "Путь для лог-файла:" << VideoPath <<  std::endl;
+    }
+ 
  
     // Старт потока, контролирующего соединение с тепловизором
     pthread_t thread;
@@ -64,8 +92,22 @@ int main()
     int result_window_thread;
     result_window_thread = pthread_create(&window_thread, NULL, &WindowVideoThread, NULL);
 
+    result_window_thread = pthread_create(&window_thread, NULL, &VideoThread, NULL);
+    
+
+    // записываем лог о включении программы
+    std::string log_message;
+    log_message.append(GetCurrentTimestamp(1));
+    log_message.append(" - Запуск программы\n");
+    LogWrite(LogPath, log_message);
+
+
+
     // создаем абстракционный сетевой объект
     Netabstraction NetObject(30001);
+
+    // СТАРТ СТРИМИНГА
+        RTSP_Transmit_Init();
 
     // ОСНОВНОЙ ЦИКЛ
     while(true)
@@ -96,6 +138,8 @@ int main()
         uint8_t TypeRequest = NetObject.Receive_Buff[0];
         printf("Тип запроса: %02X \n", TypeRequest);
         std::string RequestText(NetObject.Receive_Buff+1, NetObject.GetRecvBytes()-1); 
+
+        
         
         switch(TypeRequest)
         {
@@ -103,7 +147,19 @@ int main()
                 // сначала формируем имя снимка
                 MakeCapture(CapturePath, RequestText, &OutputStructData);
                 Answer_size=14;
+                break;
+
+            case 111: // ЗАПИСЬ ВИДЕО
+                // сначала формируем имя видео
+                MakeVideo(VideoPath, RequestText, &OutputStructData);
+                Answer_size=14;
                 break;   
+
+            case 222: // СТОП ВИДЕО
+                StopRecord();                
+                Answer_size=14;
+                break;
+
 
 
             case 2: // ЗАПРОС ТЕМПЕРАТУР
@@ -206,6 +262,8 @@ int main()
                 std::cout << "Пришел HTTP-запрос на конфигурирование тепловизора" << std::endl;   
                 ConfigDevice();
                 break;
+
+            
 
             case 0xF4:
                 if(!PingDevice()) // поэтому перед вызовом проверяем связь с устройством

@@ -11,6 +11,15 @@
 
 
 
+// ===== ЗАПИСЬ ЛОГА В ФАЙЛ =====
+int LogWrite(std::string logfile_path, std::string log_text)
+{
+    std::ofstream file(logfile_path.c_str(), std::ios::app);
+    file << log_text;
+}
+
+
+
 // ===== Замена значения в файле =====
 int RewriteFileContent(std::string file_path, std::string option_name, std::string value)
 {   

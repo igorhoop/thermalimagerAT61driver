@@ -9,6 +9,7 @@ extern "C"
     #include <libavformat/avformat.h>
     #include <libswscale/swscale.h>
     #include <libavutil/imgutils.h>
+    #include <libavutil/time.h>
 }
 
 
@@ -18,8 +19,20 @@ int dst_linesize[4];
 
 
 // мои объекты ffmpeg
-AVPacket * pPacket;
+AVPacket * pPacket;    // пакет используемый для отрисовки и записи
 AVFrame *pFrame = NULL;
+
+
+// все что нужно для RTSP
+AVPacket * pPack_RTSP = NULL;
+AVFormatContext * pOutputContext_RTSP = NULL;
+const char * pOutputURL = "rtsp://127.0.0.1:8554/ffmpeg";
+
+int RTSP_FLAG=0; // флаг что надо стримить
+
+int64_t rtsp_start_time = 0; // Время старта стриминга
+
+
 
 AVPacket * pSparePacket;
 
@@ -102,13 +115,67 @@ AVFormatContext *output_format_context = NULL;   // контекст конте�
 
 int SAVEFILE_FLAG = 0;
 
-int RecordInit()
+
+
+int RTSP_Transmit_Init() // функция инициализации (или сразу начала уже) трансляции по протоколу RTSP
+{
+    int res = 0;
+
+    pPack_RTSP = av_packet_alloc();
+    avformat_alloc_output_context2(&pOutputContext_RTSP, NULL, "rtsp", pOutputURL);
+    
+    // создаем новый поток в AVFormatContext
+    avformat_new_stream(pOutputContext_RTSP, NULL);
+
+    //pOutputContext_RTSP->streams[0]->time_base.den = 30000;
+    std::cout << "TIMEBASE нового потока: " << pOutputContext_RTSP->streams[0]->time_base.den << std::endl;
+    //exit(1);
+
+    // ==== для нового потока заполняем AVCodecParameters ====
+
+    //avcodec_parameters_copy(pOutputContext_RTSP->streams[0]->codecpar, pInputContext->streams[1]->codecpar);
+    //std::cout << "Метка 222: " << pOutputContext->streams[0]->codecpar->codec_id << std::endl;
+    //av_dump_format(pOutputContext, 0, pOutputURL, 1); // Должен делать дамп только по определенному URL, но делает полностью. Шляпа какая то
+
+    pOutputContext_RTSP->streams[0]->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
+    pOutputContext_RTSP->streams[0]->codecpar->codec_id = AV_CODEC_ID_H264;
+    //std::cout << "codec_type: " << out_stream->codecpar->codec_type << std::endl;
+    pOutputContext_RTSP->streams[0]->codecpar->codec_tag = 828601953;
+    pOutputContext_RTSP->streams[0]->codecpar->width = 640;
+    pOutputContext_RTSP->streams[0]->codecpar->height = 512;
+    pOutputContext_RTSP->streams[0]->codecpar->format = -1;
+
+
+    if (!(pOutputContext_RTSP->oformat->flags & AVFMT_NOFILE))
+    {
+        res = avio_open(&pOutputContext_RTSP->pb, pOutputURL, AVIO_FLAG_WRITE);
+        if (res < 0) {
+        std::cout << "Что-то пошло не так с RTSP, походу не получилось открыть IO для выходного URL" << std::endl;
+        exit(1);
+        }
+    }
+
+    // === ЭТАП 4: Пишем хедер в выход (заголовок всего 48 байт?)
+    avformat_write_header(pOutputContext_RTSP, NULL);
+
+
+    RTSP_FLAG=1;
+    rtsp_start_time=av_gettime();
+
+
+}
+
+
+int RecordInit(const char * filename)
 {
     std::cout << "Для инициализации FFMPEG" << std::endl;
     int res; // вспомогательная
 
     const char * sample_name = "molodym_sample.mp4"; // сэмпл чтобы взять инфу о кодеке
-    const char * out_filename = "teplo_video.mp4";      // имя выходного файла
+    
+    //const char * out_filename = "teplo_video.mp4";      // имя выходного файла
+    const char * out_filename = filename;
+    
     
     AVFormatContext *pInputFormatContext;            // контекст контейнера ВХОДНОГО
     pInputFormatContext = avformat_alloc_context();  // выделить память под контекст контейнера
@@ -196,13 +263,15 @@ int RecordInit()
 
 
     if (!(output_format_context->oformat->flags & AVFMT_NOFILE))
-        {
-            res = avio_open(&output_format_context->pb, out_filename, AVIO_FLAG_WRITE);
-            if (res < 0) {
-            fprintf(stderr, "Could not open output file '%s'", out_filename);
-            exit(1);
-            }
+    {
+        res = avio_open(&output_format_context->pb, out_filename, AVIO_FLAG_WRITE);
+        if (res < 0) {
+        fprintf(stderr, "Could not open output file '%s'", out_filename);
+        exit(1);
         }
+    }
+
+    
 
 
 
@@ -218,9 +287,29 @@ int RecordInit()
     }
 
 
-    SAVEFILE_FLAG = 1;
-    //exit(1);
+    SAVEFILE_FLAG = 1; // флаг что к записи готов
 
+}
+
+
+
+int StopRecord()
+{
+    if(SAVEFILE_FLAG==1)
+    {
+    std::cout << "ОСТАНОВКА ЗАПИСИ" << std::endl;
+    SAVEFILE_FLAG=0;
+    std::cout << "Записываем трейлер" << std::endl;
+
+    av_write_trailer(output_format_context);
+    avio_closep(&output_format_context->pb);
+    }
+    else
+    {
+      std::cout << "Останавливать нечего. Запись итак не шла" << std::endl;  
+    }
+
+    return 0;
 }
 
 
@@ -228,8 +317,14 @@ int RecordInit()
 int global_pts = 1;
 int global_dts = 0;
 int record_counter = 0;
+int64_t global_frame_counter = 0;
+
+int Flag_I_Frame = 0;
 
 extern long GlobalRecieveByteValue;
+
+
+
     
 int DecodeH264(uint8_t *inbuf, int inbufSize)
 {
@@ -243,58 +338,128 @@ int DecodeH264(uint8_t *inbuf, int inbufSize)
     pPacket->data = inbuf;
     pPacket->size = inbufSize;
 
+
+    
+
     if(pPacket->buf == NULL)
-        std::cout << "NUUUUUUUUUUUUUUUUL" << std::endl;
+        //std::cout << "NUUUUUUUUUUUUUUUUL" << std::endl;
 
     av_packet_ref(pSparePacket, pPacket);
     
-    
-
-
-    if(SAVEFILE_FLAG == 1)
-    {     
-        global_pts += 4300;
-        global_dts += 4300;
-
-        pPacket->pts = global_pts;
-        pPacket->dts = global_dts;
-        pPacket->duration = 1000;
-        //pPacket->pos = -1;
-        pPacket->stream_index = 0;
-
-        int res = av_interleaved_write_frame(output_format_context, pPacket);
-        if (res < 0)
-        {
-            fprintf(stderr, "Error muxing packettzzz\n");
-            exit(1);
-        }   
-           
-    }
-
-    av_packet_unref(pPacket);
-  
-    
-    
-
-
     int result = avcodec_send_packet(pCodecContext, pSparePacket);
     
-    std::cout << "что то из запасного пакета: " << pSparePacket->size << std::endl;
-    std::cout << "результат отправки пакета: " << result << std::endl;
+    //std::cout << "что то из запасного пакета: " << pSparePacket->size << std::endl;
+    //std::cout << "результат отправки пакета: " << result << std::endl;
 
     if(result == 0)
     {
         result = avcodec_receive_frame(pCodecContext, pFrame);
-        std::cout << "расшифровываем кадр: " << std::endl;
-        std::cout << "его ширина: " << pFrame->linesize[0] << std::endl;
+        //std::cout << "расшифровываем кадр: " << std::endl;
+        //std::cout << "его ширина: " << pFrame->linesize[0] << std::endl;
+
+
+        //std::cout << "его ТИП: " << pFrame->pict_type << std::endl;
+
+        if(pFrame->pict_type == AV_PICTURE_TYPE_I && SAVEFILE_FLAG == 1)
+        {
+            //std::cout << "ПРИШЕЛ I-КАДР" << std::endl;
+            Flag_I_Frame = 1;
+        }
+
+        if(pFrame->pict_type == AV_PICTURE_TYPE_I)
+        {
+            std::cout << "ПРИШЕЛ I-КАДР" << std::endl;
+            Flag_I_Frame = 1;
+        }
+
+        if(pFrame->pict_type == AV_PICTURE_TYPE_P)
+        {
+            std::cout << "ПРИШЕЛ P-КАДР" << std::endl;
+        }
+
+        if(pFrame->pict_type == AV_PICTURE_TYPE_B)
+        {
+            std::cout << "ПРИШЕЛ B-КАДР" << std::endl;
+            exit(1);
+            // ЭКСПЕРИМЕНТ ПОКАЗАЛ ЧТО B-КАДРОВ НЕТ ИЗ ТЕПЛОВИЗОРА
+        }
 
         int height_output = sws_scale(pResizeContext, (const uint8_t * const*) pFrame->data, pFrame->linesize, 0, 512, dst_data, dst_linesize);
 
-        std::cout << "высота output: " << height_output << std::endl;
+        //std::cout << "высота output: " << height_output << std::endl;
+
     }
 
     
     
+    if(SAVEFILE_FLAG == 1 && Flag_I_Frame == 1)
+        {     
+            // ПОХОДУ Я ЗАПИСЫВАЛ В ФАЙЛ ТОЛЬКО I-КАДРЫ 
+
+            global_pts += 3000;
+            global_dts += 3000;
+
+            pPacket->pts = global_pts;
+            pPacket->dts = global_dts;
+            pPacket->duration = 1000;
+            //pPacket->pos = -1;
+            pPacket->stream_index = 0;
+
+            int res = av_interleaved_write_frame(output_format_context, pPacket);
+            if (res < 0)
+            {
+                fprintf(stderr, "Error muxing packettzzz\n");
+                exit(1);
+            }   
+        }
+
+   
+    int64_t now_time = av_gettime();
+
+    if(RTSP_FLAG == 1)
+    {
+        std::cout << "RTSP_FLAG=" << RTSP_FLAG << std::endl;
+
+        pOutputContext_RTSP->streams[0]->time_base.den = 30000;
+        std::cout << "TIMEBASE нового потока: " << pOutputContext_RTSP->streams[0]->time_base.de
+        n << std::endl;
+        
+        //global_pts += 700;
+
+        //global_dts = global_pts - 1200;
+
+        // считаем время со старта RTSP-стриминга
+        int64_t stream_time_seconds = (av_gettime() - rtsp_start_time) / 1000000;
+
+        pPacket->pts = (now_time - rtsp_start_time) * 30000 / 1000000;
+        pPacket->dts = pPacket->pts - 8000;
+        pPacket->duration = 3000;
+
+
+        std::cout << "таймстамп пакета = " << pPacket->pts << std::endl;
+        std::cout << "таймстамп пакета = " << pPacket->dts << std::endl;
+        std::cout << "длительность пакета пакета = " << pPacket->duration << std::endl;
+
+        if(Flag_I_Frame == 1)
+        {
+            int res = av_write_frame(pOutputContext_RTSP, pPacket);
+            if (res < 0)
+            {
+                fprintf(stderr, "Error при отправки на RTSP сервер\n");
+                exit(1);
+            }
+        }
+          
+
+        
+    }
+
+    av_packet_unref(pPacket);
+
+    std::cout << "Время старта RTSP-стриминга: " << rtsp_start_time << std::endl;
+    std::cout << "Время прошедшее со старта RTSP-стриминга: " << (av_gettime() - rtsp_start_time) / 1000000 << std::endl;
+   
+        
         
     return 0;
 }
@@ -338,7 +503,6 @@ int DrawVideoFrame(sf::VertexArray &VideoFrame, uint8_t *buff_component_1, uint8
 
 
 
-
 // ПОТОЧНАЯ ФУНКЦИЯ, РИСУЮЩАЯ ОКНО И ОТОБРАЖАЮЩАЯ ВИДЕО
 void * WindowVideoThread(void * args)
 {
@@ -375,7 +539,7 @@ void * WindowVideoThread(void * args)
             {
                 std::cout << "ВКЛЮЧАЕМ ЗАПИСЬ" << std::endl;
                 std::cout << "Кол-во байт перед записью: " << GlobalRecieveByteValue << std::endl;
-                RecordInit();
+                RecordInit("TEPLO2.mp4");
             }
 
 
@@ -401,8 +565,6 @@ void * WindowVideoThread(void * args)
         if(pFrame != NULL)
         {
             DrawVideoFrame(ThermalFrame, dst_data[0], pFrame->data[1], pFrame->data[2], dst_linesize[0]/3);
-
-
         }
 
         Stream_Window.clear(sf::Color::Black); // отрисовка в скрытый буфер
@@ -417,3 +579,26 @@ void * WindowVideoThread(void * args)
 
 
 
+// ДРУГАЯ ПОТОЧНАЯ ФУНКЦИЯ, ДЛЯ РЕАЛИЗАЦИИ ВИДЕОФУНКЦИОНАЛА НО БЕЗ ОТОБРАЖЕНИЯ В ОКНЕ
+void * VideoThread(void * args)
+{
+    VideoDecoderInit();
+    while(1)
+    {
+        sleep(10);
+    }
+}
+
+
+
+
+
+// ДРУГАЯ ПОТОЧНАЯ ФУНКЦИЯ, ДЛЯ РЕАЛИЗАЦИИ ВИДЕОФУНКЦИОНАЛА НО БЕЗ ОТОБРАЖЕНИЯ В ОКНЕ. ЗАПИСЬ С РЕАЛСЕНСА
+void * VideoThread2(void * args)
+{
+    VideoDecoderInit();
+    while(1)
+    {
+        sleep(10);
+    }
+}

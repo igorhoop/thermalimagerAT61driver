@@ -1,12 +1,17 @@
 # syntax=docker/dockerfile:1
 
-# ФАЙЛ ДЛЯ СОЗДАНИЯ ОБРАЗА СЕРВЕРА АКТИВАЦИИ И ЛИЦЕНЗИРОВАНИЯ
-
 # берем базовый образ
 FROM ubuntu:20.04
 
 # что необходимо сделать в базовом образе
-RUN apt update -y && apt install build-essential -y
+RUN apt update -y && apt install build-essential -y && apt-get install -y x11-apps
+
+
+
+
+
+
+###
 
 
 # сменить директорию для 2-х случаев: использовать путь при построении образа (дальнейшие команды RUN) а так же использовать этот путь после запуска контейнера
@@ -17,10 +22,12 @@ RUN apt update -y && apt install build-essential -y
 WORKDIR /home/AT61F
 RUN mkdir /usr/local/lib/IRTInfraredSDK
 
+
 # похоже что это копирование: с машины на которой происходит build в сам образ
 #COPY . .
 
 COPY ./build/at61f .
+COPY ./build/molodym_sample.mp4 .
 COPY ./AT61F_SDK_v105/libs/* /usr/local/lib/IRTInfraredSDK
 COPY ./AT61F_SDK_v105/additional_libs/* /lib/x86_64-linux-gnu
 
@@ -35,6 +42,14 @@ RUN apt-get update && apt-get install -y tzdata
 
 
 
+# устанавливам SFML
+RUN apt-get -y install libsfml-dev
+
+# устанавливаем ffmpeg
+RUN apt -y install ffmpeg
+
+# устанавливаем графический сервер
+#RUN apt-get -y install xorg openbox
 
 #RUN make
 #RUN mv ./build/roboserv /usr/bin && mkdir /home/roboserv && #mv www ../roboserv/
@@ -42,6 +57,24 @@ RUN apt-get update && apt-get install -y tzdata
 
 #WORKDIR /home/
 
-ENV AT61F_CAP_PATH=../photos999/
+ENV AT61F_CONFIG_PATH=/etc/at61f/config
+ENV AT61F_CAPTURE_PATH=../photos999/
+ENV AT61F_VIDEO_PATH=../videos999/
+ENV AT61F_LOG_PATH=../logs999/log
 
-CMD ["./at61f"]
+
+### КУСОК ИЗ ПРИМЕРА ЧТОБ ЗАПУСКАТЬ X11
+#ARG user=split
+#ARG home=/home/$user
+#RUN groupadd -g 1000 $user
+#RUN useradd -d $home -s /bin/bash -m $user -u 1000 -g 1000 \
+# && echo $user:ubuntu | chpasswd \
+# && adduser $user sudo
+#WORKDIR $home
+#USER $user
+#ENV HOME $home
+
+
+RUN touch file
+
+CMD ./at61f >> ../logs999/standart_out

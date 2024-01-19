@@ -6,7 +6,6 @@
 
 
 
-
 std::vector<unsigned short> _temp_data(640 * 512); // для температурной матрицы
 int DecodeH264(uint8_t *inbuf, int inbufSize);
 
@@ -15,10 +14,10 @@ long GlobalRecieveByteValue = 0;
 // ФУНКЦИЯ-ОБРАБОТЧИК ПРИХОДА ВИДЕОКАДРА
 void VideoCallBackMy(char *pBuffer, long BufferLen, int width, int height, void* pContext)
 {
+    std::cout << "Пришло байт (видеокадр, или пакет?): " << BufferLen << std::endl;
+
     uint8_t * videoData;
-    int videoDataSize;
-    
-    videoDataSize = 0;
+    int videoDataSize = 0; // размер полученных данных
 
     videoData = new uint8_t [500000]; // для обращения в нужный порядок байт
     
@@ -26,10 +25,10 @@ void VideoCallBackMy(char *pBuffer, long BufferLen, int width, int height, void*
     memcpy(videoData, pBuffer, BufferLen);
     videoDataSize = BufferLen;
 
-    std::cout << "Пришло байт(видеокадр): " << BufferLen << std::endl;
+    
     GlobalRecieveByteValue += BufferLen;
 
-    //std::cout << "Вызываем функцию декодирования" << std::endl;
+    // Вызываем функцию декодирования
     DecodeH264(videoData, videoDataSize);
     
     delete [] videoData;

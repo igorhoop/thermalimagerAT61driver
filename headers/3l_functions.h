@@ -24,6 +24,13 @@ int SetEmissivityHumidity(std::string config_path, float Emissivity, float Humid
 int SetTemperatureLimit(std::string config_path, int32_t tmin, int32_t tmax);
 int GetTemperaturePixel(std::string capture_path, int32_t x, int32_t y, struct SENDPARAM * OutputData);
 int GetMapPixel(std::string capture_path, std::array<uint8_t, 327680> &response_temp_data);
+int MakeVideo(std::string video_path, std::string video_name,  struct SENDPARAM * OutputData);
+int RecordInit(const char * filename);
+int StopRecord();
+int RTSP_Transmit_Init();
+
+
+int LogWrite(std::string logfile_path, std::string log_text);
 
 // net
 int PortOpen();
@@ -32,6 +39,7 @@ int PortOpen();
 void * PingDeviceThread(void * args);
 void * WindowThread(void * args);
 void * WindowVideoThread(void * args);
+void * VideoThread(void * args);
 
 
 

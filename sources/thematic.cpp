@@ -346,7 +346,7 @@ void ConfigDevice()
     int res = sdk_set_capture_format(pSdk, Device_Info, 4);
     res==0?std::cout << "\tУстановка формата снимков: ОК":std::cout << "\tУстановка формата снимков: FAIL";
 
-    while(sdk_set_color_plate(pSdk, Device_Info, 2) != 0)    // установка цветовой гаммы
+    while(sdk_set_color_plate(pSdk, Device_Info, 5) != 0)    // установка цветовой гаммы
     {
         std::cout << "Попытка установить палитру" << std::endl;
         sleep(1);
@@ -666,6 +666,51 @@ int RequestTemperatures(struct SENDPARAM * OutputData)
     }
 
     return 0;
+}
+
+
+// ===== Запись видео =====
+int MakeVideo(std::string video_path, std::string video_name,  struct SENDPARAM * OutputData)
+{
+    std::string FullPath = video_path;    // формируемый конечный путь для снимка
+    std::string VideoName = video_name; // формируемое конечное имя снимка
+    std::string TodayDirName = "";          // сюда будет класть имя сегодняшней директории-даты     
+
+    std::cout << "Принята команда на старт записи видео" << std::endl;
+
+    
+    if((VideoName.length() < 3) || (VideoName.length() > 39))
+    {
+        std::cout << "Неподходящая длина имени видео" << std::endl;
+        OutputData->error = 0x02;
+    }
+    else
+    {
+        std::cout << "\tИмя для видео: " << VideoName << std::endl;
+
+        mkdir(FullPath.c_str(), 0777);          // создаем основной каталог если он отсутствует
+        TodayDirName = GetCurrentTimestamp(0);  // готовимся к созданию подкаталога с именем-датой (сегодняшней)
+        FullPath.append(TodayDirName);          // добавляем к основному пути имя подкаталога-дату
+        mkdir(FullPath.c_str(), 0777);          // создаем подкаталог-дату если он отсутствует
+        FullPath.append("/");                   // добавляем заход в этот подкаталог
+        
+        VideoName.append("_");                     // формируем имя для снимка добавлением к принятому имени 
+        VideoName.append(GetCurrentTimestamp(2));  // нижнего подчеркивания и текущего времени
+
+        FullPath.append(VideoName);
+        FullPath.append(".mp4");
+        std::cout << "\tПолный путь сохранения видео: " << FullPath << std::endl;
+
+        if(!PingDevice()) // поэтому перед вызовом проверяем связь с устройством
+        {
+            // Создаем jpeg и irg файл. Эта функция выкинет segfault если вызвать ее при отключенном тепловизоре
+            // При этом если не выполнена конфигурация, то все равно вернет УСПЕХ, не создав файлов. Просто говно-SDK
+            //sdk_snapshot(pSdk, Device_Info, 1, (char *) FullPath.c_str());
+            std::cout << "\tДЕЙСТВИЕ: СТАРТ ЗАПИСИ " << FullPath << std::endl;
+            RecordInit(FullPath.c_str());
+
+        }
+    }
 }
 
 
