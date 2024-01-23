@@ -8,25 +8,76 @@
 #include <cstdlib>
 #include <cstring>
 
-#include <SFML/Graphics.hpp> // SFML
+#include <iomanip>
 
+#include <SFML/Graphics.hpp> // SFML
+#include <nlohmann/json.hpp>
 
 extern IRNETHANDLE pSdk;
 extern struct ChannelInfo Device_Info;
-//extern envir_param envir_data;
-
-
-std::string AirTemp;  // избавиться от этих глобальных переменных
-std::string Emissivity;
-std::string ReflectTemp;
-std::string Humidity;
-std::string Distance;
 
 extern bool SDK_INIT;
 
-extern int32_t SettedTmin;  
-extern int32_t SettedTmax;  
-extern bool TminmaxFlag;
+bool TminmaxFlag;
+
+extern struct PROGRAM_CONFIG CONFIG;
+
+
+int WriteConfigToJSON()
+{
+    std::ofstream f(CONFIG.AT61F_CONFIG_PATH);
+
+    nlohmann::json j;
+
+    j["AT61F_CAPTURE_PATH"] = CONFIG.AT61F_CAPTURE_PATH;
+    j["AT61F_VIDEO_PATH"] = CONFIG.AT61F_VIDEO_PATH;
+    j["AT61F_LOG_PATH"] = CONFIG.AT61F_LOG_PATH;
+    j["AT61F_IP"] = CONFIG.AT61F_IP;
+    j["AT61F_PORT"] = CONFIG.AT61F_PORT;
+    j["AT61F_LOGIN"] = CONFIG.AT61F_LOGIN;
+    j["AT61F_PASS"] = CONFIG.AT61F_PASS;
+    j["AT61F_AIRTEMP"] = CONFIG.AT61F_AIRTEMP;
+    j["AT61F_EMISSIVITY"] = CONFIG.AT61F_EMISSIVITY;
+    j["AT61F_HUMIDITY"] = CONFIG.AT61F_HUMIDITY;
+    j["AT61F_DISTANCE"] = CONFIG.AT61F_DISTANCE;
+    j["AT61F_TMIN"] = CONFIG.AT61F_TMIN;
+    j["AT61F_TMAX"] = CONFIG.AT61F_TMAX;
+
+    if(f)
+    {
+        f << std::setw(4) << j << std::endl;
+    }
+
+    return 0;
+}
+
+
+
+
+
+int ReadConfigFromJSON()
+{
+     std::ifstream f(CONFIG.AT61F_CONFIG_PATH);
+     nlohmann::json config_json = nlohmann::json::parse(f);
+
+    CONFIG.AT61F_CAPTURE_PATH = config_json["AT61F_CAPTURE_PATH"];
+    CONFIG.AT61F_VIDEO_PATH = config_json["AT61F_VIDEO_PATH"];
+    CONFIG.AT61F_LOG_PATH = config_json["AT61F_LOG_PATH"];
+    CONFIG.AT61F_IP = config_json["AT61F_IP"];
+    CONFIG.AT61F_PORT = config_json["AT61F_PORT"];
+    CONFIG.AT61F_LOGIN = config_json["AT61F_LOGIN"];
+    CONFIG.AT61F_PASS = config_json["AT61F_PASS"];
+    CONFIG.AT61F_AIRTEMP = config_json["AT61F_AIRTEMP"];
+    CONFIG.AT61F_EMISSIVITY = config_json["AT61F_EMISSIVITY"];
+    CONFIG.AT61F_HUMIDITY = config_json["AT61F_HUMIDITY"];
+    CONFIG.AT61F_DISTANCE = config_json["AT61F_DISTANCE"];
+    CONFIG.AT61F_TMIN = config_json["AT61F_TMIN"];
+    CONFIG.AT61F_TMAX = config_json["AT61F_TMAX"];
+    CONFIG.AT61F_RTSP_URL = config_json["AT61F_RTSP_URL"];
+    
+    return 0;
+}
+
 
 
 // ===== Запрос карты пикселей =====
@@ -164,20 +215,34 @@ int GetTemperaturePixel(std::string capture_path, int32_t x, int32_t y, struct S
 }
 
 
-// ===== Установка температурных порогов =====
-int SetTemperatureLimit(std::string config_path, int32_t tmin, int32_t tmax)
+// ===== Установка новых температурных порогов =====
+int SetTemperatureLimit(int32_t tmin, int32_t tmax)
 {
+    // === МЕТКА ЧТО ПРОВЕРЕНО (РАБОТАЕТ) ===
+
     std::cout << "Пришла команда на установку температурных порогов" << std::endl;
 
-    std::cout << "\tMin_t: " << tmin << std::endl;
-    std::cout << "\tMax_t: " << tmax << std::endl << std::endl;
+    std::cout << "\tNew Value of Min_t: " << tmin << std::endl;
+    std::cout << "\tNew Value of Max_t: " << tmax << std::endl << std::endl;
 
-    std::cout << "\tУстанавливаем эти пороги..." << std::endl;    
 
+    std::cout << "\tУстанавливаем эти пороги..." << std::endl;  
+
+    
+
+    CONFIG.AT61F_TMIN = std::to_string(tmin);
+    CONFIG.AT61F_TMAX = std::to_string(tmax);
+
+    WriteConfigToJSON();
+
+    /* УСТАРЕВШЕЕ
     RewriteFileContent(config_path, "Tmin=",  std::to_string(tmin));
     RewriteFileContent(config_path, "Tmax=",  std::to_string(tmax));
-    ReinitialAndConnect();
-    ConfigDevice();
+    */
+
+    
+    //ReinitialAndConnect(); // в случае с порогами реинициализацию делать не нужно
+    //ConfigDevice();
 
     return 0;
 }
@@ -186,13 +251,25 @@ int SetTemperatureLimit(std::string config_path, int32_t tmin, int32_t tmax)
 // ===== Установка излучаемости и влажности =====
 int SetEmissivityHumidity(std::string config_path, float Emissivity, float Humidity)
 {
+    // === МЕТКА ЧТО ПРОВЕРЕНО (РАБОТАЕТ) ===
+
     std::cout << "Пришла команда на установку излучаемости и влажности" << std::endl;
-    std::cout << "\tEmissivity: " << Emissivity << std::endl;
-    std::cout << "\tHumidity: " << Humidity << std::endl;
+    std::cout << "\tNew Value Emissivity: " << Emissivity << std::endl;
+    std::cout << "\tNew Value Humidity: " << Humidity << std::endl;
     std::cout << "\tУстанавливаем эти значения..." << std::endl;
+
+    
+    CONFIG.AT61F_EMISSIVITY = std::to_string(Emissivity);
+    CONFIG.AT61F_HUMIDITY = std::to_string(Humidity);
+
+    WriteConfigToJSON();
+
+    /* УСТАРЕВШЕЕ
 
     RewriteFileContent(config_path, "Emissivity=", std::to_string(Emissivity));
     RewriteFileContent(config_path, "Humidity=",  std::to_string(Humidity));
+    */
+
     ReinitialAndConnect();
     ConfigDevice();
 
@@ -203,11 +280,23 @@ int SetEmissivityHumidity(std::string config_path, float Emissivity, float Humid
 // ===== Установка дистанции =====
 int SetDistance(std::string config_path, int8_t Distance)
 {
+
+    // === МЕТКА ЧТО ПРОВЕРЕНО (РАБОТАЕТ) ===
+
     std::cout << "Пришла команда на установку дистанции" << std::endl;
-    std::cout << "\tDistance: " << (int) Distance << std::endl;
+    std::cout << "\tNew Value Distance: " << (int) Distance << std::endl;
     std::cout << "\tУстанавливаем это значение..." << std::endl;
 
+    CONFIG.AT61F_DISTANCE = std::to_string(Distance);
+
+    WriteConfigToJSON();
+    
+    /* УСТАРЕВШЕЕ 
+
     RewriteFileContent(config_path, "Distance=", std::to_string(Distance));
+
+    */
+
     ReinitialAndConnect();
     ConfigDevice();
 
@@ -219,12 +308,23 @@ int SetDistance(std::string config_path, int8_t Distance)
 // ===== Установка температуры окружающей среды =====
 int SetAirTemp(std::string config_path, int8_t AirTemp)
 {
+
+    // === МЕТКА ЧТО ПРОВЕРЕНО (РАБОТАЕТ) ===
+
     std::cout << "Пришла команда на установку температуры окружающей среды" << std::endl;
-    std::cout << "\tAirTemp: " << (int) AirTemp << std::endl;
+    std::cout << "\tNew Value AirTemp: " << (int) AirTemp << std::endl;
     std::cout << "\tУстанавливаем это значение..." << std::endl;
+
+    CONFIG.AT61F_AIRTEMP = std::to_string(AirTemp);
+
+    WriteConfigToJSON();
+
+    /* УСТАРЕВШЕЕ 
 
     RewriteFileContent(config_path, "AirTemp=", std::to_string(AirTemp));
     
+    */
+
     ReinitialAndConnect();
     ConfigDevice();
 
@@ -346,7 +446,7 @@ void ConfigDevice()
     int res = sdk_set_capture_format(pSdk, Device_Info, 4);
     res==0?std::cout << "\tУстановка формата снимков: ОК":std::cout << "\tУстановка формата снимков: FAIL";
 
-    while(sdk_set_color_plate(pSdk, Device_Info, 5) != 0)    // установка цветовой гаммы
+    while(sdk_set_color_plate(pSdk, Device_Info, 3) != 0)    // установка цветовой гаммы
     {
         std::cout << "Попытка установить палитру" << std::endl;
         sleep(1);
@@ -430,6 +530,9 @@ void InitialSDK() // здесь не должны быть функции SDK, �
     pSdk != NULL ? std::cout << "\tСоздание дескриптора SDK - ОК\n" << std::endl : std::cout << "\tСоздание дескриптора SDK: FAIL\n" << std::endl;
 
     // шаг 4. логин в устройство. Хотя скорее это применение параметров подключения к устройству для SDK (то есть SDK теперь будет знать куда стучаться)
+    
+    /* УСТАРЕВШЕЕ
+
     std::string ConfigPath;
     if(getenv("AT61F_CONFIG_PATH")==NULL)
     {
@@ -440,8 +543,9 @@ void InitialSDK() // здесь не должны быть функции SDK, �
     {
         ConfigPath = getenv("AT61F_CONFIG_PATH");
     }
+    */
     
-    GetConfigForConnectCAM(ConfigPath); // сначала заполненяем структуру ChannelInfo исходя из config-файла: IP, порт, логин, пароль
+    EnterConfigForConnectCAM(CONFIG.AT61F_CONFIG_PATH); // сначала заполненяем структуру ChannelInfo исходя из config-файла: IP, порт, логин, пароль
     int isLogin = (sdk_loginDevice(pSdk, Device_Info) == 0);
     std::cout << (isLogin?"\tПрименение параметров к SDK - ОК\n":"Применение параметров к SDK - FAIL\n") << std::endl;
     if(!isLogin)
@@ -477,28 +581,26 @@ int DeviceConnect()
 
 
 
-
-int SetTempLimit(int32_t tmin, int32_t tmax)
-{
-    std::cout << "\tУстановка температурных порогов..." << std::endl;  
-    SettedTmin = tmin; // наш температурный порог
-    SettedTmax = tmax; // наш температурный порог
-    TminmaxFlag=true;                          // поднимаем флаг о том что значения установлены
-    return 0;
-}
-
-
 int SetEnvirParams()
 {
     std::cout << "Устанавливаем параметры окружающей среды" << std::endl;
     envir_param envir_data;         //структура для установки физических параметров (окружающей среды)
+
+
+    envir_data.airTemp = strtof(CONFIG.AT61F_AIRTEMP.c_str(), nullptr) * 10000;
+    envir_data.distance = strtof(CONFIG.AT61F_DISTANCE.c_str(), nullptr) * 10000;
+    envir_data.emissivity = strtof(CONFIG.AT61F_EMISSIVITY.c_str(), nullptr) * 10000;
+    envir_data.reflectTemp = envir_data.airTemp;
+    envir_data.humidity = strtof(CONFIG.AT61F_HUMIDITY.c_str(), nullptr) * 10000;
+
+    /* УСТАРЕВШЕЕ 
 
     envir_data.airTemp = strtof(AirTemp.c_str(), nullptr) * 10000;
     envir_data.distance = strtof(Distance.c_str(), nullptr) * 10000;
     envir_data.emissivity = strtof(Emissivity.c_str(), nullptr) * 10000;
     envir_data.reflectTemp = envir_data.airTemp;
     envir_data.humidity = strtof(Humidity.c_str(), nullptr) * 10000;
-    
+    */
 
     if(sdk_set_envir_param(pSdk, Device_Info, envir_data)==-1)
     {
@@ -516,15 +618,12 @@ int SetEnvirParams()
 
 
 
-
-
-
-
-
-
-// ===== Чтение файла конфигурации и заполнение структуры ChannelInfo =====
-int GetConfigForConnectCAM(std::string path)
+// ===== Заполнение структуры ChannelInfo =====
+int EnterConfigForConnectCAM(std::string path)
 {    
+
+    /* УСТАРЕВШЕЕ
+
     std::string config = GetContentFromFile(path);
     int vsp1 = (int) config.find("ip=");
     int vsp2 = (int) config.find(";");
@@ -592,15 +691,25 @@ int GetConfigForConnectCAM(std::string path)
     std::cout << "\tTmin: " << tmin << std::endl;
     std::cout << "\tTmax: " << tmax << std::endl;
 
+
+    */
+
+
     // заполнение данных для подключения
     strcpy_s(Device_Info.szServerName, "AT61F-CAM");
-    strcpy_s(Device_Info.szIP, host.c_str());
-    strcpy_s(Device_Info.szUserName, login.c_str());
-    strcpy_s(Device_Info.szPWD, pass.c_str());
-    Device_Info.wPortNum = atoi(port.c_str());
+    strcpy_s(Device_Info.szIP, CONFIG.AT61F_IP.c_str());
+    strcpy_s(Device_Info.szUserName, CONFIG.AT61F_LOGIN.c_str());
+    strcpy_s(Device_Info.szPWD, CONFIG.AT61F_PASS.c_str());
+    Device_Info.wPortNum = atoi(CONFIG.AT61F_PORT.c_str());
     Device_Info.channel = 0; // что за канал, одному богу известно
 
-    SetTempLimit(atoi(tmin.c_str()), atoi(tmax.c_str()));
+    
+    
+    std::cout << "\tУстановка флага что температурные пороги установлены..." << std::endl;  
+    TminmaxFlag=true; // поднимаем флаг о том что значения температурных порогов установлены
+
+   
+
 
     return 0;
 }
@@ -616,6 +725,9 @@ int GetConfigForConnectCAM(std::string path)
 // ===== Запрос температур в кадре: MIN, MAX, AVG =====
 int RequestTemperatures(struct SENDPARAM * OutputData)
 {
+    int32_t SettedTmin = atoi(CONFIG.AT61F_TMIN.c_str());  
+    int32_t SettedTmax = atoi(CONFIG.AT61F_TMAX.c_str());  
+
     Area_Temp area_temp = { 0 };    // структура куда SDK по запросу будет класть температурные данные текущего кадра
 
     // переменные в которые запишем значения температур, полученных из специальной SDK-шной структуры 
@@ -721,6 +833,9 @@ int MakeVideo(std::string video_path, std::string video_name,  struct SENDPARAM 
 int MakeCapture(std::string capture_path, std::string capture_name, struct SENDPARAM * OutputData)
 {
     int vsp_res;                        // вспомогательная
+
+    int32_t SettedTmin = atoi(CONFIG.AT61F_TMIN.c_str());  
+    int32_t SettedTmax = atoi(CONFIG.AT61F_TMAX.c_str());  
 
     int32_t CalcTavg = 0;       // подсчитанное вручную значение средней температуры в кадре
     int32_t CalcTmax = 0;       // подсчитанное вручную значение максимальной температуры в кадре

@@ -5,11 +5,9 @@
 #include <unistd.h>
 
 
-
 std::vector<unsigned short> _temp_data(640 * 512); // для температурной матрицы
 int DecodeH264(uint8_t *inbuf, int inbufSize);
 
-long GlobalRecieveByteValue = 0;
 
 // ФУНКЦИЯ-ОБРАБОТЧИК ПРИХОДА ВИДЕОКАДРА
 void VideoCallBackMy(char *pBuffer, long BufferLen, int width, int height, void* pContext)
@@ -25,13 +23,11 @@ void VideoCallBackMy(char *pBuffer, long BufferLen, int width, int height, void*
     memcpy(videoData, pBuffer, BufferLen);
     videoDataSize = BufferLen;
 
-    
-    GlobalRecieveByteValue += BufferLen;
-
     // Вызываем функцию декодирования
     DecodeH264(videoData, videoDataSize);
     
     delete [] videoData;
+    
     
 }
 
@@ -67,8 +63,6 @@ void TempCallBackMy(char *pBuffer, long BufferLen, void* pContext)
         if(_temp_data[i] > max)
             max = _temp_data[i];
 
-        
-
         //celsius_point = ((_temp_data[i]+ 7000)/30) - 273.2;
         //std::cout << celsius_point << std::endl;
     }
@@ -100,7 +94,8 @@ void SerialCallBackMy(char *pRecvDataBuff, int BuffSize, void *context)
 // ФУНКЦИЯ-ОБРАБОТЧИК ПРИХОДА CНИМКОВ
 void SnapCallBackMy(int m_ch, char *pBuffer, int size, void *context)
 {
-    // мы используем sdk_snapshot(), в которой имя файла задается в аргументах
+    // МЫ ИСПОЛЬЗУЕМ sdk_snapshot(), в которой имя файла задается в аргументах
+    // ПОЭТОМУ ВСЕ НИЖЕ - ЗАКОММЕНТИРОВАНО
     
     /*
     if(pBuffer)
@@ -129,7 +124,6 @@ void SnapCallBackMy(int m_ch, char *pBuffer, int size, void *context)
 
 
     }
-
     */
 }
 

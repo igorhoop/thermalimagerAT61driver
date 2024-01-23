@@ -5,7 +5,7 @@ void InitialSDK();
 int DeviceConnect();
 
 std::string GetContentFromFile(const std::string & filePath);
-int GetConfigForConnectCAM(std::string path);
+int EnterConfigForConnectCAM(std::string path);
 std::string GetCurrentTimestamp(int format);
 uint8_t CheckHTTPRequest(std::string request);
 void ReinitialAndConnect();
@@ -15,19 +15,21 @@ int GetDeviceInfo();
 int WaitDevice();
 int SetEnvirParams();
 int RewriteFileContent(std::string file_path, std::string option_name, std::string value);
-int SetTempLimit(int32_t tmin, int32_t tmax);
 int RequestTemperatures(struct SENDPARAM * OutputData);
 int MakeCapture(std::string capture_path, std::string capture_name, struct SENDPARAM * OutputData);
 int SetAirTemp(std::string config_path, int8_t AirTemp);
 int SetDistance(std::string config_path, int8_t Distance);
 int SetEmissivityHumidity(std::string config_path, float Emissivity, float Humidity);
-int SetTemperatureLimit(std::string config_path, int32_t tmin, int32_t tmax);
+int SetTemperatureLimit(int32_t tmin, int32_t tmax);
 int GetTemperaturePixel(std::string capture_path, int32_t x, int32_t y, struct SENDPARAM * OutputData);
 int GetMapPixel(std::string capture_path, std::array<uint8_t, 327680> &response_temp_data);
 int MakeVideo(std::string video_path, std::string video_name,  struct SENDPARAM * OutputData);
 int RecordInit(const char * filename);
 int StopRecord();
-int RTSP_Transmit_Init();
+int RTSP_Start();
+
+int ReadConfigFromJSON();
+int WriteConfigToJSON();
 
 
 int LogWrite(std::string logfile_path, std::string log_text);
@@ -99,3 +101,24 @@ enum RESPONSE_TYPES {
     NONE
 };
 
+
+
+struct PROGRAM_CONFIG
+{
+    std::string AT61F_CONFIG_PATH;
+    std::string AT61F_CAPTURE_PATH;
+    std::string AT61F_VIDEO_PATH;
+    std::string AT61F_LOG_PATH;
+    std::string AT61F_IP;
+    std::string AT61F_PORT;
+    std::string AT61F_LOGIN;
+    std::string AT61F_PASS;
+    std::string AT61F_AIRTEMP;
+    std::string AT61F_EMISSIVITY;
+    std::string AT61F_HUMIDITY;
+    std::string AT61F_DISTANCE;
+    std::string AT61F_TMIN;
+    std::string AT61F_TMAX;
+    std::string AT61F_RTSP_URL;
+
+};

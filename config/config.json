@@ -1,0 +1,16 @@
+{
+    "AT61F_AIRTEMP": "35",
+    "AT61F_CAPTURE_PATH": "/home/hoop/MY_PROG_PROJECTS/AT61F/development/photos/",
+    "AT61F_DISTANCE": "8",
+    "AT61F_EMISSIVITY": "0.900000",
+    "AT61F_HUMIDITY": "1.200000",
+    "AT61F_IP": "192.168.1.156",
+    "AT61F_LOGIN": "888888",
+    "AT61F_LOG_PATH": "/home/hoop/MY_PROG_PROJECTS/AT61F/development/logs/log",
+    "AT61F_PASS": "888888",
+    "AT61F_PORT": "3000",
+    "AT61F_TMAX": "35",
+    "AT61F_TMIN": "10",
+    "AT61F_VIDEO_PATH": "/home/hoop/MY_PROG_PROJECTS/AT61F/development/videos/",
+    "AT61F_RTSP_URL": "rtsp://127.0.0.1:8554/ffmpeg"
+}

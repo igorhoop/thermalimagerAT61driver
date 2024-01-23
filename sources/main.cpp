@@ -4,6 +4,11 @@
 #include <cstring>
 #include <pthread.h>
 
+
+#include <fstream>
+
+#include <nlohmann/json.hpp>
+
 #include "../headers/Netabstraction.h"
 
 
@@ -11,30 +16,20 @@
 
 bool SDK_INIT = false;
 
-int32_t SettedTmax = 0;         // максимальный порог температуры для срабатывания сигнала
-int32_t SettedTmin = 0;         // минимальный порог температуры для срабатывания сигнала
-bool TminmaxFlag = false;       // флаг установки порога минимальной и максимальной температуры
-
 IRNETHANDLE pSdk;                 // дескриптор для работы с SDK
 struct ChannelInfo Device_Info;   // структура с информацией о подключении к устройству, заполняется автоматически чтением config-файла
-
-
-
+struct PROGRAM_CONFIG CONFIG;
 
 
 int main()
 {
     std::string CapturePath;    // путь к снимкам, который требуется взять из переменной среды
     std::string VideoPath;    // путь к видео, который требуется взять из переменной среды
-    std::string ConfigPath;     // путь к конфигурационному файлу, который требуется взять из переменной среды
     std::string LogPath;        // путь к лог-файлу
     
     std::cout << "Старт модуля взаимодействия с тепловизором AT61F (Infiray)." << std::endl;
 
-
-
-
-
+    
 
     // чтение переменных среды
     if(getenv("AT61F_CONFIG_PATH")==NULL)
@@ -44,43 +39,34 @@ int main()
     }
     else
     {
-        ConfigPath = getenv("AT61F_CONFIG_PATH");
-        std::cout << "Расположение config-файла: " << ConfigPath <<  std::endl;
+        CONFIG.AT61F_CONFIG_PATH = getenv("AT61F_CONFIG_PATH");
+        std::cout << "Расположение config-файла: " << CONFIG.AT61F_CONFIG_PATH <<  std::endl;
     }
 
-    if(getenv("AT61F_CAPTURE_PATH")==NULL)
-    {
-        std::cout << "Не задана переменная среды с путем сохранения снимков. Завершение работы" << std::endl;
-        exit(1);
-    }
-    else
-    {
-        CapturePath = getenv("AT61F_CAPTURE_PATH");
-        std::cout << "Путь для сохранения снимков:" << CapturePath <<  std::endl;
-    }
-    if(getenv("AT61F_VIDEO_PATH")==NULL)
-    {
-        std::cout << "Не задана переменная среды с путем сохранения видео. Завершение работы" << std::endl;
-        exit(1);
-    }
-    else
-    {
-        VideoPath = getenv("AT61F_VIDEO_PATH");
-        std::cout << "Путь для сохранения видео:" << VideoPath <<  std::endl;
-    }
 
-    if(getenv("AT61F_LOG_PATH")==NULL)
-    {
-        std::cout << "Не задана переменная среды с путем для лог-файла. Завершение работы" << std::endl;
-        exit(1);
-    }
-    else
-    {
-        LogPath = getenv("AT61F_LOG_PATH");
-        std::cout << "Путь для лог-файла:" << VideoPath <<  std::endl;
-    }
- 
- 
+    // чтение конфигурации для работы программы
+    ReadConfigFromJSON();
+
+    std::cout << "==== Параметры программы ====" << std::endl;
+    std::cout << "Путь для сохранения снимков: " << CONFIG.AT61F_CAPTURE_PATH <<  std::endl;
+    std::cout << "Путь для сохранения видео: " << CONFIG.AT61F_VIDEO_PATH <<  std::endl;
+    std::cout << "Путь для лог-файла: " << CONFIG.AT61F_LOG_PATH <<  std::endl;
+    std::cout << "URL сервера для RTSP: " << CONFIG.AT61F_RTSP_URL << std::endl;
+
+    std::cout << "==== Параметры тепловизора ====" << std::endl;
+    std::cout << "IP: " << CONFIG.AT61F_IP <<  std::endl;
+    std::cout << "PORT: " << CONFIG.AT61F_PORT <<  std::endl;
+    std::cout << "LOGIN: " << CONFIG.AT61F_LOGIN <<  std::endl;
+    std::cout << "PASS: " << CONFIG.AT61F_PASS <<  std::endl;
+    std::cout << "AIRTEMP: " << CONFIG.AT61F_AIRTEMP <<  std::endl;
+    std::cout << "EMISSIVITY: " << CONFIG.AT61F_EMISSIVITY <<  std::endl;
+    std::cout << "HUMIDITY: " << CONFIG.AT61F_HUMIDITY <<  std::endl;
+    std::cout << "DISTANCE: " << CONFIG.AT61F_DISTANCE <<  std::endl;
+    std::cout << "TMIN: " << CONFIG.AT61F_TMIN <<  std::endl;
+    std::cout << "TMAX: " << CONFIG.AT61F_TMAX <<  std::endl;
+
+  
+
     // Старт потока, контролирующего соединение с тепловизором
     pthread_t thread;
     int result_thread;
@@ -101,13 +87,12 @@ int main()
     log_message.append(" - Запуск программы\n");
     LogWrite(LogPath, log_message);
 
-
-
     // создаем абстракционный сетевой объект
     Netabstraction NetObject(30001);
 
-    // СТАРТ СТРИМИНГА
-        RTSP_Transmit_Init();
+    // Старт rtsp-стримминга
+    //RTSP_Start();
+        
 
     // ОСНОВНОЙ ЦИКЛ
     while(true)
@@ -172,7 +157,7 @@ int main()
                 if((NetObject.GetRecvBytes()) == sizeof(GETAIRTEMP))
                 {
                     memcpy(&AirTempStructData, NetObject.Receive_Buff, sizeof(AirTempStructData));
-                    SetAirTemp(ConfigPath, AirTempStructData.air_temp);
+                    SetAirTemp(CONFIG.AT61F_CONFIG_PATH, AirTempStructData.air_temp);
                     OutputStructData.error = 0x00;   
                 }
                 else
@@ -188,7 +173,7 @@ int main()
                 if((NetObject.GetRecvBytes()) == sizeof(GETDISTANCE))
                 {
                     memcpy(&DistanceStructData, NetObject.Receive_Buff, sizeof(DistanceStructData));
-                    SetDistance(ConfigPath, DistanceStructData.distance);
+                    SetDistance(CONFIG.AT61F_CONFIG_PATH, DistanceStructData.distance);
                     OutputStructData.error = 0x00;
                 }
                 else
@@ -203,7 +188,7 @@ int main()
                 if((NetObject.GetRecvBytes()) == sizeof(GETENVIRPARAMS))
                 {
                     memcpy(&EnvirParamStructData, NetObject.Receive_Buff, sizeof(EnvirParamStructData));
-                    SetEmissivityHumidity(ConfigPath, EnvirParamStructData.emissivity, EnvirParamStructData.humidity);
+                    SetEmissivityHumidity(CONFIG.AT61F_CONFIG_PATH, EnvirParamStructData.emissivity, EnvirParamStructData.humidity);
                     OutputStructData.error = 0x00;
                 }
                 else
@@ -241,7 +226,7 @@ int main()
                 if((NetObject.GetRecvBytes()) == sizeof(GETTEMPLIM))
                 {
                     memcpy(&TempLimitStructData, NetObject.Receive_Buff, sizeof(TempLimitStructData));
-                    SetTemperatureLimit(ConfigPath, TempLimitStructData.min_t, TempLimitStructData.max_t);
+                    SetTemperatureLimit(TempLimitStructData.min_t, TempLimitStructData.max_t);
                     OutputStructData.error = 0x00; // флаг для ответа что все хорошо
                 }
                 else
@@ -296,8 +281,8 @@ int main()
 
                 std::cout << std::endl;
                 std::cout << "Current temperature limits:" << std::endl; 
-                std::cout << "\tTmin: " << SettedTmin << std::endl;
-                std::cout << "\tTmax: " << SettedTmax << std::endl;
+                std::cout << "\tTmin: " << CONFIG.AT61F_TMIN << std::endl;
+                std::cout << "\tTmax: " << CONFIG.AT61F_TMAX << std::endl;
                 break;
 
             default: 
@@ -356,117 +341,6 @@ int main()
     return 0;
 }
 
-
-/*
-    //sdk_osd_switch(SdkHandle, Device_Info, 1);
-
-    int iUnit;
-    sdk_set_temp_unit(SdkHandle, Device_Info, 0);
-    sdk_get_temp_unit(SdkHandle, Device_Info, &iUnit);
-
-    int zapis = sdk_start_record(SdkHandle, Device_Info, "./file222");
-    std::cout << "zapis res: " << zapis << std::endl;
-
-    //sdk_osd_switch(pSdk, Device_Info, 1); // включение/отключение OSD
-    
-    /*Area_pos area1_pos;
-    area1_pos.iMode = 2;
-    area1_pos.iIndex = 3;
-    area1_pos.m_cursor_enable = true;
-    area1_pos.m_osd_enable = true;
-    area1_pos.m_region_enable = true;
-    area1_pos.iStartPosX = 50;
-    area1_pos.iStartPosY = 50;
-    area1_pos.iEndPosX = 150;
-    area1_pos.iEndPosY = 150;
-    sdk_set_area_pos(SdkHandle, Device_Info, 5, area1_pos);
-    */
-
-    //sdk_remove_area_pos(SdkHandle, Device_Info, 6, 2);
-
-    /*
-
-    unsigned short port; 
-    sdk_get_onvif_port(SdkHandle, Device_Info, &port);
-    std::cout << port;
-    
-    while(true)
-    {
-        
-        //sleep(10);
-        //std::cout << "metka123 " << std::endl;
-
-        //int z = sdk_serial_cmd_send(SdkHandle, reinterpret_cast<char*>(sendCmd), length);
-        //std::cout << "Результат отправки: " << z << std::endl;
-
-        //z = sdk_serial_cmd_receive(SdkHandle, RecieveBuff, &buflen);
-        //std::cout << "Результат приема: " << z << std::endl;
-        //sdk_start_url(SdkHandle, Device_Info.szIP);
-        //getchar(); // прокручивает сразу много циклов если много символов
-        std::cin.get();
-
-
-    int res = sdk_get_temp_data(SdkHandle, Device_Info, 256, area_temp);
-    std::cout << "Result: " << res << std::endl;
-
-
-
-    sdk_CapSingle(SdkHandle, Device_Info);
-
-        
-
-    //pallette_num++;
-
-        //sdk_set_device_ip(SdkHandle, Device_Info, "192.168.1.156", 3000);
-
-        //s
-        //int zz = sdk_snapshot(SdkHandle, Device_Info, 1, "./ddd");
-        //std::cout << "Результат сэпшота: " << zz << std::endl;
-
-    }
-    // sdk_start_url(SdkHandle, Device_Info.szIP); // что это? зачем?
-
-    std::cin.get();
-    
-    sdk_release(SdkHandle); // походу удаление дескриптора
-    return 0;
-
-
-
-            case 92:
-                sdk_CapSingle(pSdk, Device_Info);
-                break;
-
-*/
-
-
-
-
-
-
-
-// старый метод как я делал, потом через структуры сделали
-
-/*
-
-
-
-
-
-std::memcpy(&SettedAroundT, &luxuary_buf[1], sizeof(uint32_t));
-std::memcpy(&SettedDist, &luxuary_buf[5], sizeof(uint32_t));
-std::memcpy(&SettedTmin, &luxuary_buf[9], sizeof(uint32_t));
-std::memcpy(&SettedTmax, &luxuary_buf[13], sizeof(uint32_t));
-
-std::cout << "Установленный AroundTemp=" << SettedAroundT << std::endl;
-std::cout << "Установленный SettedDist=" << SettedDist << std::endl;
-std::cout << "Установленный Tmin=" << SettedTmin << std::endl;
-std::cout << "Установленный Tmax=" << SettedTmax << std::endl;
-
-std::memcpy(&response_temp_data[1], &reserve_byte_1, sizeof(char));
-std::memcpy(&response_temp_data[2], &reserve_byte_2, sizeof(char));
-std::memcpy(&response_temp_data[3], &reserve_byte_3, sizeof(char));
-*/
 
 
 
