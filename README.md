@@ -24,11 +24,6 @@ source forsource
 
 ## Запуск с докером
 
-
-```
-НИЖЕ НЕАКТУАЛЬНО
-```
-
 Dockerfile сделан таким образом, что создает переменную окружения с путем к конфигурационному файлу:
 ```
 AT61F_CONFIG_PATH=/etc/at61f/config/config_for_run_on_docker.json
