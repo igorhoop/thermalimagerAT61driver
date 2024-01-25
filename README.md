@@ -1,9 +1,35 @@
-Задание переменных среды
-export AT61F_CAPTURE_PATH=/home/hoop/MY_PROG_PROJECTS/AT61F/development/photos/
-export AT61F_VIDEO_PATH=/home/hoop/MY_PROG_PROJECTS/AT61F/development/videos/
-export AT61F_CONFIG_PATH=/home/hoop/MY_PROG_PROJECTS/AT61F/development/config/config
+## Сборка
+```
+mkdir build
+make
+```
 
 
+
+## Запуск без докера
+
+1) Перед запуском нужно создать переменную среды **AT61F_CONFIG_PATH**, содержащую путь к файлу конфигурации ***config.json**. Я использовал для этого файл `forsourse`, который нужно ""сорснуть"":
+```
+source forsource
+```
+Если эту переменную не создать, программа завершится с уведомлением о необходимости наличия этой переменной.
+
+2) В файле конфигурации задаются параметры для подключения к тепловизору и параметры относящиеся к работе программы: пути сохранения скриншотов, логов, записей видео, URL сервера, куда нужно заливать RTSP поток, чтобы сервер в свою очередь уже раздавал поток клиентам.
+
+2) Настроить 
+
+3) Запускаем
+```
+./at61f
+```
+
+
+## Запуск с докером
+
+
+```
+НИЖЕ НЕАКТУАЛЬНО
+```
 
 Программа ищет файл конфигурации по пути:
 /etc/at61f/config
@@ -13,13 +39,7 @@ export AT61F_CONFIG_PATH=/home/hoop/MY_PROG_PROJECTS/AT61F/development/config/co
 AT61F_CONFIG_PATH=
 
 
-Также требуется задать путь для сохранения снимков, посредством переменной среды
-AT61F_CAPTURE_PATH
-Контейнер создан с уже определенной перемен ной среды
-AT61F_CAPTURE_PATH=./photos/
-При запуске контейнера желаемую папку хост-машины монтируем в эту контейнерскую папку.
-
-
+При запуске контейнера желаемую папку хост-машины монтируем в контейнерскую папку.
 docker run -itp 5000:30001 --mount type=bind,src=./config/,target=/etc/at61f --mount type=bind,src=/home/hoop/TEPLOVIZOR-PHOTO/,target=/home/photos/ at61f /bin/bash
 
 
