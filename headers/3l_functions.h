@@ -41,7 +41,7 @@ int PortOpen();
 void * PingDeviceThread(void * args);
 void * WindowThread(void * args);
 void * WindowVideoThread(void * args);
-void * VideoThread(void * args);
+void * VideoThread(void * args); // наверное надо удалить
 
 
 
@@ -120,5 +120,7 @@ struct PROGRAM_CONFIG
     std::string AT61F_TMIN;
     std::string AT61F_TMAX;
     std::string AT61F_RTSP_URL;
+    std::string AT61F_WINDOW_MODE;
+    std::string AT61F_RTSP_MODE;
 
 };

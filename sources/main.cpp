@@ -43,9 +43,10 @@ int main()
         std::cout << "Расположение config-файла: " << CONFIG.AT61F_CONFIG_PATH <<  std::endl;
     }
 
-
+    
     // чтение конфигурации для работы программы
     ReadConfigFromJSON();
+  
 
     std::cout << "==== Параметры программы ====" << std::endl;
     std::cout << "Путь для сохранения снимков: " << CONFIG.AT61F_CAPTURE_PATH <<  std::endl;
@@ -73,13 +74,22 @@ int main()
     result_thread = pthread_create(&thread, NULL, &PingDeviceThread, NULL);
 
 
-    // Старт потока для работы с окном
-    pthread_t window_thread;
-    int result_window_thread;
-    result_window_thread = pthread_create(&window_thread, NULL, &WindowVideoThread, NULL);
+    // Старт потока для работы с окном, если это указано в конфиге
+    if(CONFIG.AT61F_WINDOW_MODE == "true")
+    {
+        pthread_t window_thread;
+        int result_window_thread;
+        result_window_thread = pthread_create(&window_thread, NULL, &WindowVideoThread, NULL);
+    }
 
-    result_window_thread = pthread_create(&window_thread, NULL, &VideoThread, NULL);
-    
+
+    // Старт RTSP стриминга, если это указано в конфиге
+    if(CONFIG.AT61F_RTSP_MODE == "true")
+    {
+     //   RTSP_Start();
+    }
+
+    //result_window_thread = pthread_create(&window_thread, NULL, &VideoThread, NULL);
 
     // записываем лог о включении программы
     std::string log_message;
@@ -90,8 +100,6 @@ int main()
     // создаем абстракционный сетевой объект
     Netabstraction NetObject(30001);
 
-    // Старт rtsp-стримминга
-    //RTSP_Start();
         
 
     // ОСНОВНОЙ ЦИКЛ

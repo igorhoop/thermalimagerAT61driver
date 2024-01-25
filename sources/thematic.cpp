@@ -42,6 +42,9 @@ int WriteConfigToJSON()
     j["AT61F_DISTANCE"] = CONFIG.AT61F_DISTANCE;
     j["AT61F_TMIN"] = CONFIG.AT61F_TMIN;
     j["AT61F_TMAX"] = CONFIG.AT61F_TMAX;
+    j["AT61F_RTSP_URL"]=CONFIG.AT61F_RTSP_URL;
+    j["AT61F_WINDOW_MODE"]=CONFIG.AT61F_WINDOW_MODE;
+    j["AT61F_RTSP_MODE"]=CONFIG.AT61F_RTSP_MODE;
 
     if(f)
     {
@@ -74,6 +77,8 @@ int ReadConfigFromJSON()
     CONFIG.AT61F_TMIN = config_json["AT61F_TMIN"];
     CONFIG.AT61F_TMAX = config_json["AT61F_TMAX"];
     CONFIG.AT61F_RTSP_URL = config_json["AT61F_RTSP_URL"];
+    CONFIG.AT61F_WINDOW_MODE = config_json["AT61F_WINDOW_MODE"];
+    CONFIG.AT61F_RTSP_MODE = config_json["AT61F_RTSP_MODE"];
     
     return 0;
 }

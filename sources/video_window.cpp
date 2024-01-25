@@ -49,7 +49,7 @@ struct SwsContext *pResizeContext;
 AVFormatContext * output_format_context = NULL;   // контекст контейнера ВЫХОДНОГО ФАЙЛОВОГО
 
 int RECORD_FLAG = 0;
-
+int DECODER_INIT_FLAG = 0;
 
 
 AVCodecContext *pCodecContext = NULL;       // указатель на контекст кодека (основная структура кодека)
@@ -116,6 +116,7 @@ int H264_DecoderInitialization()
     }
 
 
+    DECODER_INIT_FLAG=1;
     return 0;
 }
 
@@ -126,6 +127,8 @@ int H264_DecoderInitialization()
 
 int RTSP_Init() // функция инициализации (или сразу начала уже) трансляции по протоколу RTSP
 {
+    std::cout << "Вызов функции инициализации RTSP" << std::endl;
+
     /*
     Что хотим на выходе:
         1) Выходной формат-контекст для RTSP с добавленным видеопотоком
@@ -133,6 +136,11 @@ int RTSP_Init() // функция инициализации (или сразу 
         3) Открытый ввод/вывод для взаимодействия с URL, связанным с этим формат-контекстом
     
     */
+
+    if(DECODER_INIT_FLAG==0)
+    {
+        H264_DecoderInitialization();
+    }
 
     int res = 0;
 
@@ -188,12 +196,16 @@ int RTSP_Start()
 {
     int res = 0; 
 
+    std::cout << "Заход в функцию RTSP_Start" << std::endl;
+   
     if(RTSP_FLAG==1)
     {
         std::cout << "Стрим уже идет" << std::endl;
     }
     else
     {
+        std::cout << "Попытка запуска RTSP" << std::endl;
+
         RTSP_Init();
              
         // Пишем хедер в выход (заголовок всего 48 байт?)
@@ -339,11 +351,19 @@ int WriteFrame()
     
 int DecodeH264(uint8_t *inbuf, int inbufSize)
 {
+
+    if(CONFIG.AT61F_RTSP_MODE == "true" && RTSP_FLAG==0)
+    {
+        RTSP_Start();
+    }
+
     if(pCodecContext == NULL || pFrame == NULL || inbufSize <= 0)
     {
         std::cout << "Еще рано декодировать, т.к. отсутствуют нужные объекты (не было инициализации всяких штук от ffmpeg)" << std::endl;
         return 1;
     }
+
+    
 
     
     pPacket->data = inbuf;
@@ -370,18 +390,18 @@ int DecodeH264(uint8_t *inbuf, int inbufSize)
 
         if(pFrame->pict_type == AV_PICTURE_TYPE_I)
         {
-            std::cout << "ПРИШЕЛ I-КАДР" << std::endl;
+            //std::cout << "ПРИШЕЛ I-КАДР" << std::endl;
             Flag_I_Frame = 1;
         }
 
         if(pFrame->pict_type == AV_PICTURE_TYPE_P)
         {
-            std::cout << "ПРИШЕЛ P-КАДР" << std::endl;
+            //std::cout << "ПРИШЕЛ P-КАДР" << std::endl;
         }
 
         if(pFrame->pict_type == AV_PICTURE_TYPE_B)
         {
-            std::cout << "ПРИШЕЛ B-КАДР" << std::endl;
+            //std::cout << "ПРИШЕЛ B-КАДР" << std::endl;
             // ЭКСПЕРИМЕНТ ПОКАЗАЛ ЧТО B-КАДРОВ НЕТ ИЗ ТЕПЛОВИЗОРА
         }
 
@@ -447,8 +467,11 @@ int DecodeH264(uint8_t *inbuf, int inbufSize)
             int res = av_write_frame(pOutputContext_RTSP, pPacket);
             if (res < 0)
             {
-                fprintf(stderr, "Error при отправки на RTSP сервер\n");
-                exit(1);
+                fprintf(stderr, "Error при отправке на RTSP сервер\n");
+
+                // перезапуск               
+                RTSP_Stop();
+                return 1;
             }
         }      
 
@@ -582,9 +605,9 @@ void * WindowVideoThread(void * args)
 
 
 
+/*
 
-
-// ПОТОЧНАЯ ФУНКЦИЯ, ДЛЯ РЕАЛИЗАЦИИ СТРИМИНГА
+// ПОТОЧНАЯ ФУНКЦИЯ, НЕ ПОМНЮ ДЛЯ ЧЕГО ХОТЕЛ ИСПОЛЬЗОВАТЬ
 void * VideoThread(void * args)
 {
     H264_DecoderInitialization();
@@ -593,4 +616,6 @@ void * VideoThread(void * args)
         sleep(10);
     }
 }
+
+*/
 

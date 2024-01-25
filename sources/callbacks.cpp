@@ -12,7 +12,7 @@ int DecodeH264(uint8_t *inbuf, int inbufSize);
 // ФУНКЦИЯ-ОБРАБОТЧИК ПРИХОДА ВИДЕОКАДРА
 void VideoCallBackMy(char *pBuffer, long BufferLen, int width, int height, void* pContext)
 {
-    std::cout << "Пришло байт (видеокадр, или пакет?): " << BufferLen << std::endl;
+    //std::cout << "Пришло байт (видеокадр, или пакет?): " << BufferLen << std::endl;
 
     uint8_t * videoData;
     int videoDataSize = 0; // размер полученных данных
