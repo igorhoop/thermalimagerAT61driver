@@ -58,10 +58,37 @@ docker run -itp 5000:30001 --mount type=bind,src=./config/,target=/etc/at61f/con
 3) Запускаем контейнер в фоне, без получения доступа к терминалу:
 docker run -dp 5000:30001 --mount type=bind,src=./config/,target=/etc/at61f/config --mount type=bind,src=/home/hoop/TEPLOVIZOR-PHOTO/,target=/home/AT61f/photos/ --mount type=bind,src=/home/hoop/TEPLOVIZOR-VIDEO/,target=/home/AT61f/video/ --mount type=bind,src=/home/hoop/TEPLOVIZOR-LOGS/,target=/home/AT61f/logs/ at61f_rtsp_version
 
+4) Запуск на AGILEX NAV MODULE
+docker run -dp 5000:30001 --mount type=bind,src=/home/gigaipc/at61f_rtsp_version/config/,target=/etc/at61f/config --mount type=bind,src=/home/gigaipc/igor_new/at61f_photos/,target=/home/AT61f/photos/ --mount type=bind,src=/home/gigaipc/igor_new/at61f_video/,target=/home/AT61f/video/ --mount type=bind,src=/home/gigaipc/igor_new/at61f_logs/,target=/home/AT61f/logs/ at61f_rtsp_version
+
 
 ```
 
 Здесь происходит проброс портов в контейнер. То есть пакеты прилетающие на 5000 порт хост-системы перенаправляются на 30001 порт контейнера. 30001 порт используется программой для общения со внешним миром.
+
+
+## Дополнительная информация
+
+Построение контейнера: 
+```
+docker build -t at61f_rtsp_version .
+```
+
+Создание образа (архива) с контейнером (для дистрибьюции):
+```
+docker save -o at61f_rtsp_version.tar at61f_rtsp_version
+```
+
+Установка образа из архива:
+```
+docker load -i at61f_rtsp_version.tar
+```
+
+
+
+
+
+
 
 
 

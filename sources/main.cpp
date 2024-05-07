@@ -12,8 +12,6 @@
 #include "../headers/Netabstraction.h"
 
 
-
-
 bool SDK_INIT = false;
 
 IRNETHANDLE pSdk;                 // дескриптор для работы с SDK
@@ -28,8 +26,6 @@ int main()
     std::string LogPath;        // путь к лог-файлу
     
     std::cout << "Старт модуля взаимодействия с тепловизором AT61F (Infiray)." << std::endl;
-
-    
 
     // чтение переменных среды
     if(getenv("AT61F_CONFIG_PATH")==NULL)
@@ -132,8 +128,8 @@ int main()
         printf("Тип запроса: %02X \n", TypeRequest);
         std::string RequestText(NetObject.Receive_Buff+1, NetObject.GetRecvBytes()-1); 
 
-        
-        
+
+
         switch(TypeRequest)
         {
             case 1: // ФОРМИРОВАНИЕ СНИМКА
