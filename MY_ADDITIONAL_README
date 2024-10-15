@@ -1,0 +1,14 @@
+# Установка образа из архива:
+
+docker load -i at61f_rtsp_version.tar
+
+
+# Запуск образа из архива:
+docker run -dp 5000:30001 --mount type=bind,src=./config/,target=/etc/at61f/config --mount type=bind,src=/home/hoop/TEPLOVIZOR-PHOTO/,target=/home/AT61f/photos/ --mount type=bind,src=/home/hoop/TEPLOVIZOR-VIDEO/,target=/home/AT61f/video/ --mount type=bind,src=/home/hoop/TEPLOVIZOR-LOGS/,target=/home/AT61f/logs/ at61f_rtsp_version
+
+
+# Пример запуска на роботе AgileX Nav Module
+docker run -dp 5000:30001 --mount type=bind,src=/home/gigaipc/at61f_rtsp_version/config/,target=/etc/at61f/config --mount type=bind,src=/home/gigaipc/igor_new/at61f_photos/,target=/home/AT61f/photos/ --mount type=bind,src=/home/gigaipc/igor_new/at61f_video/,target=/home/AT61f/video/ --mount type=bind,src=/home/gigaipc/igor_new/at61f_logs/,target=/home/AT61f/logs/ at61f_rtsp_version
+
+
+

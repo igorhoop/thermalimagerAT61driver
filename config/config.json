@@ -4,7 +4,7 @@
     "AT61F_DISTANCE": "5",
     "AT61F_EMISSIVITY": "0.900000",
     "AT61F_HUMIDITY": "1.200000",
-    "AT61F_IP": "192.168.1.156",
+    "AT61F_IP": "192.168.123.228",
     "AT61F_LOGIN": "888888",
     "AT61F_LOG_PATH": "/home/hoop/MY_PROG_PROJECTS/AT61F/development/logs/log",
     "AT61F_PASS": "888888",

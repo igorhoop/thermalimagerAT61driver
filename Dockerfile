@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # берем базовый образ
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 
 # что необходимо сделать в базовом образе
 RUN apt update -y && apt install build-essential -y && apt-get install -y x11-apps && apt install -y iputils-ping
